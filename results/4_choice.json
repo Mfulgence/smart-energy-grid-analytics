@@ -1,0 +1,6 @@
+{
+  "baseline": "energy_readings",
+  "chunk_interval": "1 day, 0:00:00",
+  "experiment_start": "2026-10-13 12:47:36.955 CAT",
+  "cutoff": "2026-10-11 12:47:36.955 CAT"
+}

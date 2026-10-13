@@ -1,0 +1,47 @@
+==============================================================================
+8_2_baseline   started 2026-10-13 14:41:33.999 CAT   machine Muhirwa
+==============================================================================
+Baseline run                         | Value                                                    
+-------------------------------------+----------------------------------------------------------
+Forecast rule                        | value of the same hour on the previous day (lag 24 hours)
+Test days                            | 2026-09-22 to 2026-09-28                                 
+Regions                              | 10                                                       
+Predictions produced                 | 1,680                                                    
+Predictions missing a value          | 0                                                        
+MAE (kWh)                            | 42.708                                                   
+RMSE (kWh)                           | 79.403                                                   
+Mean actual hourly consumption (kWh) | 590.810                                                  
+MAE as % of mean actual              | 7.23 %                                                   
+Completed                            | 2026-10-13 14:41:34.061 CAT                              
+(10 rows)
+
+--- Sample predictions (actual vs previous-day value) ---
+region   | target_hour         | forecast_origin | lag_24h_source      | energy_kwh | baseline_kwh | baseline_error
+---------+---------------------+-----------------+---------------------+------------+--------------+---------------
+Region 1 | 2026-09-22 00:00:00 | 2026-09-22      | 2026-09-21 00:00:00 | 435.59     | 441.869      | 6.279         
+Region 1 | 2026-09-22 01:00:00 | 2026-09-22      | 2026-09-21 01:00:00 | 438.892    | 435.374      | -3.518        
+Region 1 | 2026-09-22 02:00:00 | 2026-09-22      | 2026-09-21 02:00:00 | 437.375    | 432.51       | -4.865        
+Region 1 | 2026-09-22 03:00:00 | 2026-09-22      | 2026-09-21 03:00:00 | 447.844    | 443.206      | -4.639        
+Region 1 | 2026-09-22 04:00:00 | 2026-09-22      | 2026-09-21 04:00:00 | 463.197    | 468.38       | 5.183         
+Region 1 | 2026-09-22 05:00:00 | 2026-09-22      | 2026-09-21 05:00:00 | 509.527    | 515.601      | 6.074         
+Region 1 | 2026-09-22 06:00:00 | 2026-09-22      | 2026-09-21 06:00:00 | 586.375    | 587.616      | 1.241         
+Region 1 | 2026-09-22 07:00:00 | 2026-09-22      | 2026-09-21 07:00:00 | 645.064    | 645.129      | 0.065         
+(8 rows)
+
+--- Baseline MAE by test day ---
+test day   | weekday   | MAE (kWh)
+-----------+-----------+----------
+2026-09-22 | Tuesday   | 4.991    
+2026-09-23 | Wednesday | 4.652    
+2026-09-24 | Thursday  | 5.311    
+2026-09-25 | Friday    | 5.008    
+2026-09-26 | Saturday  | 135.695  
+2026-09-27 | Sunday    | 3.840    
+2026-09-28 | Monday    | 139.461  
+(7 rows)
+The largest errors fall on the days whose previous day is a different day type
+(Saturday is predicted from Friday, Monday from Sunday).
+
+Predictions saved: results/8_2_baseline_predictions.csv
+------------------------------------------------------------------------------
+8_2_baseline   finished 2026-10-13 14:41:34.080 CAT   (output saved in results/8_2_baseline.log)

@@ -1,0 +1,279 @@
+==============================================================================
+3_2_benchmark   started 2026-10-13 12:07:38.573 CAT   machine Muhirwa
+==============================================================================
+Client          : Python 3.12.6 + psycopg 3.3.6 (s32_benchmark.py)
+Timing tool     : time.perf_counter() around execute()+fetchall()
+Machine         : Muhirwa
+Cache state     : WARM (1 warm-up before 5 measured runs, no restart, caches not cleared)
+shared_buffers  : 4055MB
+work_mem        : 16221kB
+max_parallel_workers_per_gather: 4
+jit             : off
+ANALYZE energy_readings_3h  done
+ANALYZE energy_readings  done
+ANALYZE energy_readings_week  done
+  Q1 on energy_readings_3h         median      156.3 ms   min      153.0   max      163.1   results match
+  Q1 on energy_readings            median      174.3 ms   min      158.3   max      231.7   results match
+  Q1 on energy_readings_week       median      163.8 ms   min      160.5   max      178.9   results match
+  Q2 on energy_readings_3h         median      222.7 ms   min      214.1   max      224.9   results match
+  Q2 on energy_readings            median      218.7 ms   min      210.9   max      243.4   results match
+  Q2 on energy_readings_week       median      272.8 ms   min      257.8   max      286.4   results match
+  Q3 on energy_readings_3h         median    3,520.1 ms   min    2,952.7   max    3,590.0   results match
+  Q3 on energy_readings            median    1,002.4 ms   min      990.0   max    1,064.8   results match
+  Q3 on energy_readings_week       median      913.7 ms   min      867.5   max    1,007.9   results match
+  Q4 on energy_readings_3h         median        6.9 ms   min        5.2   max        7.3   results match
+  Q4 on energy_readings            median        2.7 ms   min        1.8   max        3.0   results match
+  Q4 on energy_readings_week       median        1.8 ms   min        1.8   max        2.3   results match
+  Q5 on energy_readings_3h         median      981.8 ms   min      901.1   max    1,010.9   results match
+  Q5 on energy_readings            median      803.2 ms   min      796.7   max      821.7   results match
+  Q5 on energy_readings_week       median      797.8 ms   min      759.9   max      825.4   results match
+
+--- Result check against energy_readings_3h (numeric tolerance 0.001) ---
+query | table                | rows  | status | largest numeric difference
+------+----------------------+-------+--------+---------------------------
+Q1    | energy_readings_3h   | 24    | MATCH  | 0.000000000               
+Q1    | energy_readings      | 24    | MATCH  | 0.000000000               
+Q1    | energy_readings_week | 24    | MATCH  | 0.000000000               
+Q2    | energy_readings_3h   | 10    | MATCH  | 0.000000000               
+Q2    | energy_readings      | 10    | MATCH  | 0.000000000               
+Q2    | energy_readings_week | 10    | MATCH  | 0.000000000               
+Q3    | energy_readings_3h   | 4,000 | MATCH  | 0.000000000               
+Q3    | energy_readings      | 4,000 | MATCH  | 0.000000000               
+Q3    | energy_readings_week | 4,000 | MATCH  | 0.000000000               
+Q4    | energy_readings_3h   | 1     | MATCH  | 0.000000000               
+Q4    | energy_readings      | 1     | MATCH  | 0.000000000               
+Q4    | energy_readings_week | 1     | MATCH  | 0.000000000               
+Q5    | energy_readings_3h   | 1     | MATCH  | 0.000000000               
+Q5    | energy_readings      | 1     | MATCH  | 0.000000003               
+Q5    | energy_readings_week | 1     | MATCH  | 0.000000117               
+(15 rows)
+
+--- WARM-CACHE timing comparison, milliseconds (5 measured runs after 1 warm-up) ---
+query | table                | median ms | min ms  | max ms 
+------+----------------------+-----------+---------+--------
+Q1    | energy_readings_3h   | 156.3     | 153.0   | 163.1  
+Q1    | energy_readings      | 174.3     | 158.3   | 231.7  
+Q1    | energy_readings_week | 163.8     | 160.5   | 178.9  
+Q2    | energy_readings_3h   | 222.7     | 214.1   | 224.9  
+Q2    | energy_readings      | 218.7     | 210.9   | 243.4  
+Q2    | energy_readings_week | 272.8     | 257.8   | 286.4  
+Q3    | energy_readings_3h   | 3,520.1   | 2,952.7 | 3,590.0
+Q3    | energy_readings      | 1,002.4   | 990.0   | 1,064.8
+Q3    | energy_readings_week | 913.7     | 867.5   | 1,007.9
+Q4    | energy_readings_3h   | 6.9       | 5.2     | 7.3    
+Q4    | energy_readings      | 2.7       | 1.8     | 3.0    
+Q4    | energy_readings_week | 1.8       | 1.8     | 2.3    
+Q5    | energy_readings_3h   | 981.8     | 901.1   | 1,010.9
+Q5    | energy_readings      | 803.2     | 796.7   | 821.7  
+Q5    | energy_readings_week | 797.8     | 759.9   | 825.4  
+(15 rows)
+
+--- Median ms per table (side by side) ---
+query | energy_readings_3h | energy_readings | energy_readings_week | fastest              | fastest vs slowest                     
+------+--------------------+-----------------+----------------------+----------------------+----------------------------------------
+Q1    | 156.3              | 174.3           | 163.8                | energy_readings_3h   | 1.12 x faster than energy_readings     
+Q2    | 222.7              | 218.7           | 272.8                | energy_readings      | 1.25 x faster than energy_readings_week
+Q3    | 3,520.1            | 1,002.4         | 913.7                | energy_readings_week | 3.85 x faster than energy_readings_3h  
+Q4    | 6.9                | 2.7             | 1.8                  | energy_readings_week | 3.79 x faster than energy_readings_3h  
+Q5    | 981.8              | 803.2           | 797.8                | energy_readings_week | 1.23 x faster than energy_readings_3h  
+(5 rows)
+
+Session: first warm-up submitted 2026-10-13 12:08:18.733 CAT
+         last measured result    2026-10-13 12:09:13.447 CAT
+         session seconds         54.7
+
+--- EXPLAIN (ANALYZE, BUFFERS) Q1 on energy_readings_3h ---
+-- Average power per CAT hour on 21 September, over every available reading
+-- in that hour (24 rows). Narrow one-day time filter across all meters.
+SELECT time_bucket('1 hour', event_time, 'Africa/Kigali') AS cat_hour,
+       avg(power_kw)                                      AS avg_power_kw
+FROM energy_readings_3h
+WHERE event_time >= TIMESTAMPTZ '2026-09-21 00:00:00+02'
+  AND event_time <  TIMESTAMPTZ '2026-09-22 00:00:00+02'
+GROUP BY cat_hour
+ORDER BY cat_hour
+
+Sort  (cost=9967.93..9974.65 rows=2688 width=16) (actual time=188.318..196.162 rows=24.00 loops=1)
+  Sort Key: (time_bucket('01:00:00'::interval, energy_readings_3h.event_time, 'Africa/Kigali'::text, NULL::timestamp with time zone, NULL::interval))
+  Sort Method: quicksort  Memory: 25kB
+  Buffers: shared hit=4701
+  ->  Finalize HashAggregate  (cost=9774.50..9814.82 rows=2688 width=16) (actual time=188.288..196.148 rows=24.00 loops=1)
+        Group Key: (time_bucket('01:00:00'::interval, energy_readings_3h.event_time, 'Africa/Kigali'::text, NULL::timestamp with time zone, NULL::interval))
+        Batches: 1  Memory Usage: 97kB
+        Buffers: shared hit=4701
+        ->  Gather  (cost=1512.05..9773.60 rows=180 width=40) (actual time=93.517..196.098 rows=32.00 loops=1)
+              Workers Planned: 4
+              Workers Launched: 4
+              Buffers: shared hit=4701
+              ->  Parallel Append  (cost=512.05..8755.60 rows=45 width=40) (actual time=66.501..122.962 rows=6.40 loops=5)
+                    Buffers: shared hit=4701
+                    ->  Partial HashAggregate  (cost=1037.10..1037.25 rows=12 width=40) (actual time=57.503..57.505 rows=2.00 loops=1)
+                          Group Key: time_bucket('01:00:00'::interval, _hyper_2_190_chunk.event_time, 'Africa/Kigali'::text, NULL::timestamp with time zone, NULL::interval)
+                          Buffers: shared hit=614
+                          Worker 1:  Batches: 1  Memory Usage: 32kB
+                          ->  Parallel Index Scan Backward using _hyper_2_190_chunk_energy_readings_3h_time_idx on _hyper_2_190_chunk  (cost=0.29..943.79 rows=18661 width=16) (actual time=0.099..48.978 rows=31668.00 loops=1)
+                                Index Cond: ((event_time >= '2026-09-21 00:00:00+02'::timestamp with time zone) AND (event_time < '2026-09-22 00:00:00+02'::timestamp with time zone))
+                                Index Searches: 1
+                                Buffers: shared hit=614
+                    ->  Partial HashAggregate  (cost=512.05..512.20 rows=12 width=40) (actual time=27.739..27.740 rows=1.00 loops=1)
+                          Group Key: time_bucket('01:00:00'::interval, _hyper_2_198_chunk.event_time, 'Africa/Kigali'::text, NULL::timestamp with time zone, NULL::interval)
+                          Buffers: shared hit=305
+                          Worker 0:  Batches: 1  Memory Usage: 32kB
+                          ->  Parallel Index Scan Backward using _hyper_2_198_chunk_energy_readings_3h_time_idx on _hyper_2_198_chunk  (cost=0.29..466.08 rows=9193 width=16) (actual time=0.110..23.681 rows=15860.00 loops=1)
+                                Index Cond: ((event_time >= '2026-09-21 00:00:00+02'::timestamp with time zone) AND (event_time < '2026-09-22 00:00:00+02'::timestamp with time zone))
+                                Index Searches: 1
+                                Buffers: shared hit=305
+                    ->  Partial HashAggregate  (cost=1030.21..1030.36 rows=12 width=40) (actual time=76.500..76.502 rows=3.00 loops=1)
+                          Group Key: time_bucket('01:00:00'::interval, _hyper_2_192_chunk.event_time, 'Africa/Kigali'::text, NULL::timestamp with time zone, NULL::interval)
+                          Buffers: shared hit=541
+                          Worker 3:  Batches: 1  Memory Usage: 32kB
+                          ->  Parallel Seq Scan on _hyper_2_192_chunk  (cost=0.00..890.43 rows=27955 width=16) (actual time=0.034..64.120 rows=47523.00 loops=1)
+                                Buffers: shared hit=541
+                    ->  Partial HashAggregate  (cost=1030.20..1030.35 rows=12 width=40) (actual time=78.026..78.027 rows=3.00 loops=1)
+                          Group Key: time_bucket('01:00:00'::interval, _hyper_2_194_chunk.event_time, 'Africa/Kigali'::text, NULL::timestamp with time zone, NULL::interval)
+                          Buffers: shared hit=541
+                          Worker 2:  Batches: 1  Memory Usage: 32kB
+                          ->  Parallel Seq Scan on _hyper_2_194_chunk  (cost=0.00..890.43 rows=27954 width=16) (actual time=0.043..65.826 rows=47522.00 loops=1)
+                                Buffers: shared hit=541
+                    ->  Partial HashAggregate  (cost=1029.14..1029.29 rows=12 width=40) (actual time=39.360..39.361 rows=2.00 loops=2)
+                          Group Key: time_bucket('01:00:00'::interval, _hyper_2_191_chunk.event_time, 'Africa/Kigali'::text, NULL::timestamp with time zone, NULL::interval)
+                          Buffers: shared hit=540
+                          Worker 0:  Batches: 1  Memory Usage: 32kB
+                          Worker 2:  Batches: 1  Memory Usage: 32kB
+                          ->  Parallel Seq Scan on _hyper_2_191_chunk  (cost=0.00..889.39 rows=27951 width=16) (actual time=0.025..33.039 rows=23758.50 loops=2)
+                                Buffers: shared hit=540
+                    ->  Partial HashAggregate  (cost=1029.11..1029.26 rows=12 width=40) (actual time=24.010..24.011 rows=1.33 loops=3)
+                          Group Key: time_bucket('01:00:00'::interval, _hyper_2_193_chunk.event_time, 'Africa/Kigali'::text, NULL::timestamp with time zone, NULL::interval)
+                          Batches: 1  Memory Usage: 32kB
+                          Buffers: shared hit=540
+                          Worker 1:  Batches: 1  Memory Usage: 32kB
+                          Worker 2:  Batches: 1  Memory Usage: 32kB
+                          ->  Parallel Seq Scan on _hyper_2_193_chunk  (cost=0.00..889.37 rows=27949 width=16) (actual time=0.014..20.137 rows=15838.00 loops=3)
+                                Buffers: shared hit=540
+                    ->  Partial HashAggregate  (cost=1028.84..1028.99 rows=12 width=40) (actual time=19.778..19.779 rows=3.00 loops=3)
+                          Group Key: time_bucket('01:00:00'::interval, _hyper_2_197_chunk.event_time, 'Africa/Kigali'::text, NULL::timestamp with time zone, NULL::interval)
+                          Batches: 1  Memory Usage: 32kB
+                          Buffers: shared hit=540
+                          Worker 0:  Batches: 1  Memory Usage: 32kB
+                          Worker 3:  Batches: 1  Memory Usage: 32kB
+                          ->  Parallel Seq Scan on _hyper_2_197_chunk  (cost=0.00..889.17 rows=27934 width=16) (actual time=0.018..16.556 rows=15829.00 loops=3)
+                                Buffers: shared hit=540
+                    ->  Partial HashAggregate  (cost=1028.72..1028.87 rows=12 width=40) (actual time=72.172..72.174 rows=3.00 loops=1)
+                          Group Key: time_bucket('01:00:00'::interval, _hyper_2_195_chunk.event_time, 'Africa/Kigali'::text, NULL::timestamp with time zone, NULL::interval)
+                          Batches: 1  Memory Usage: 32kB
+                          Buffers: shared hit=540
+                          ->  Parallel Seq Scan on _hyper_2_195_chunk  (cost=0.00..889.09 rows=27927 width=16) (actual time=0.005..60.191 rows=47476.00 loops=1)
+                                Buffers: shared hit=540
+                    ->  Partial HashAggregate  (cost=1028.65..1028.80 rows=12 width=40) (actual time=92.723..92.725 rows=3.00 loops=1)
+                          Group Key: time_bucket('01:00:00'::interval, _hyper_2_196_chunk.event_time, 'Africa/Kigali'::text, NULL::timestamp with time zone, NULL::interval)
+                          Batches: 1  Memory Usage: 32kB
+                          Buffers: shared hit=540
+                          ->  Parallel Seq Scan on _hyper_2_196_chunk  (cost=0.00..889.04 rows=27923 width=16) (actual time=0.014..77.889 rows=47469.00 loops=1)
+                                Buffers: shared hit=540
+Planning:
+  Buffers: shared hit=62
+Planning Time: 0.741 ms
+Execution Time: 196.294 ms
+
+--- EXPLAIN (ANALYZE, BUFFERS) Q1 on energy_readings ---
+-- Average power per CAT hour on 21 September, over every available reading
+-- in that hour (24 rows). Narrow one-day time filter across all meters.
+SELECT time_bucket('1 hour', event_time, 'Africa/Kigali') AS cat_hour,
+       avg(power_kw)                                      AS avg_power_kw
+FROM energy_readings
+WHERE event_time >= TIMESTAMPTZ '2026-09-21 00:00:00+02'
+  AND event_time <  TIMESTAMPTZ '2026-09-22 00:00:00+02'
+GROUP BY cat_hour
+ORDER BY cat_hour
+
+Sort  (cost=10042.25..10048.97 rows=2688 width=16) (actual time=215.097..223.103 rows=24.00 loops=1)
+  Sort Key: (time_bucket('01:00:00'::interval, energy_readings.event_time, 'Africa/Kigali'::text, NULL::timestamp with time zone, NULL::interval))
+  Sort Method: quicksort  Memory: 25kB
+  Buffers: shared hit=4889
+  ->  Finalize HashAggregate  (cost=9848.82..9889.14 rows=2688 width=16) (actual time=215.073..223.092 rows=24.00 loops=1)
+        Group Key: (time_bucket('01:00:00'::interval, energy_readings.event_time, 'Africa/Kigali'::text, NULL::timestamp with time zone, NULL::interval))
+        Batches: 1  Memory Usage: 97kB
+        Buffers: shared hit=4889
+        ->  Gather  (cost=2004.32..9847.18 rows=328 width=40) (actual time=214.809..223.039 rows=61.00 loops=1)
+              Workers Planned: 2
+              Workers Launched: 2
+              Buffers: shared hit=4889
+              ->  Parallel Append  (cost=1004.32..8814.38 rows=164 width=40) (actual time=142.886..175.397 rows=20.33 loops=3)
+                    Buffers: shared hit=4889
+                    ->  Partial HashAggregate  (cost=1004.32..1005.52 rows=96 width=40) (actual time=59.197..59.199 rows=2.00 loops=1)
+                          Group Key: time_bucket('01:00:00'::interval, _hyper_1_21_chunk.event_time, 'Africa/Kigali'::text, NULL::timestamp with time zone, NULL::interval)
+                          Buffers: shared hit=549
+                          Worker 1:  Batches: 1  Memory Usage: 32kB
+                          ->  Parallel Index Scan Backward using _hyper_1_21_chunk_energy_readings_time_idx on _hyper_1_21_chunk  (cost=0.42..914.52 rows=17959 width=16) (actual time=0.114..50.447 rows=31668.00 loops=1)
+                                Index Cond: ((event_time >= '2026-09-21 00:00:00+02'::timestamp with time zone) AND (event_time < '2026-09-22 00:00:00+02'::timestamp with time zone))
+                                Index Searches: 1
+                                Buffers: shared hit=549
+                    ->  Partial HashAggregate  (cost=7806.84..7808.04 rows=96 width=40) (actual time=155.652..155.659 rows=19.67 loops=3)
+                          Group Key: time_bucket('01:00:00'::interval, _hyper_1_22_chunk.event_time, 'Africa/Kigali'::text, NULL::timestamp with time zone, NULL::interval)
+                          Batches: 1  Memory Usage: 32kB
+                          Buffers: shared hit=4340
+                          Worker 0:  Batches: 1  Memory Usage: 32kB
+                          Worker 1:  Batches: 1  Memory Usage: 32kB
+                          ->  Parallel Seq Scan on _hyper_1_22_chunk  (cost=0.00..7079.17 rows=145534 width=16) (actual time=0.024..131.401 rows=116122.67 loops=3)
+                                Filter: ((event_time >= '2026-09-21 00:00:00+02'::timestamp with time zone) AND (event_time < '2026-09-22 00:00:00+02'::timestamp with time zone))
+                                Rows Removed by Filter: 10562
+                                Buffers: shared hit=4340
+Planning:
+  Buffers: shared hit=20
+Planning Time: 0.508 ms
+Execution Time: 223.173 ms
+
+--- EXPLAIN (ANALYZE, BUFFERS) Q1 on energy_readings_week ---
+-- Average power per CAT hour on 21 September, over every available reading
+-- in that hour (24 rows). Narrow one-day time filter across all meters.
+SELECT time_bucket('1 hour', event_time, 'Africa/Kigali') AS cat_hour,
+       avg(power_kw)                                      AS avg_power_kw
+FROM energy_readings_week
+WHERE event_time >= TIMESTAMPTZ '2026-09-21 00:00:00+02'
+  AND event_time <  TIMESTAMPTZ '2026-09-22 00:00:00+02'
+GROUP BY cat_hour
+ORDER BY cat_hour
+
+Finalize GroupAggregate  (cost=13961.15..14785.05 rows=2688 width=16) (actual time=230.667..237.915 rows=24.00 loops=1)
+  Group Key: (time_bucket('01:00:00'::interval, _hyper_3_258_chunk.event_time, 'Africa/Kigali'::text, NULL::timestamp with time zone, NULL::interval))
+  Buffers: shared hit=7580
+  ->  Gather Merge  (cost=13961.15..14712.48 rows=6451 width=40) (actual time=230.662..237.895 rows=68.00 loops=1)
+        Workers Planned: 2
+        Workers Launched: 2
+        Buffers: shared hit=7580
+        ->  Sort  (cost=12961.13..12967.85 rows=2688 width=40) (actual time=190.240..190.242 rows=22.67 loops=3)
+              Sort Key: (time_bucket('01:00:00'::interval, _hyper_3_258_chunk.event_time, 'Africa/Kigali'::text, NULL::timestamp with time zone, NULL::interval))
+              Sort Method: quicksort  Memory: 26kB
+              Buffers: shared hit=7580
+              Worker 0:  Sort Method: quicksort  Memory: 26kB
+              Worker 1:  Sort Method: quicksort  Memory: 26kB
+              ->  Partial HashAggregate  (cost=12774.41..12808.01 rows=2688 width=40) (actual time=190.191..190.204 rows=22.67 loops=3)
+                    Group Key: time_bucket('01:00:00'::interval, _hyper_3_258_chunk.event_time, 'Africa/Kigali'::text, NULL::timestamp with time zone, NULL::interval)
+                    Batches: 1  Memory Usage: 97kB
+                    Buffers: shared hit=7564
+                    Worker 0:  Batches: 1  Memory Usage: 97kB
+                    Worker 1:  Batches: 1  Memory Usage: 97kB
+                    ->  Result  (cost=0.43..11986.32 rows=157619 width=16) (actual time=0.053..163.285 rows=126678.67 loops=3)
+                          Buffers: shared hit=7564
+                          ->  Parallel Index Scan Backward using _hyper_3_258_chunk_energy_readings_week_time_idx on _hyper_3_258_chunk  (cost=0.43..10016.08 rows=157619 width=16) (actual time=0.043..37.719 rows=126678.67 loops=3)
+                                Index Cond: ((event_time >= '2026-09-21 00:00:00+02'::timestamp with time zone) AND (event_time < '2026-09-22 00:00:00+02'::timestamp with time zone))
+                                Index Searches: 1
+                                Buffers: shared hit=7564
+Planning:
+  Buffers: shared hit=13
+Planning Time: 0.341 ms
+Execution Time: 237.969 ms
+
+--- Chunks touched by each plan (evidence of chunk exclusion) ---
+query | energy_readings_3h | energy_readings | energy_readings_week
+------+--------------------+-----------------+---------------------
+Q1    | 9                  | 2               | 1                   
+Q2    | 57                 | 8               | 2                   
+Q3    | 225                | 29              | 5                   
+Q4    | 57                 | 8               | 2                   
+Q5    | 225                | 29              | 5                   
+(5 rows)
+
+Saved: results/3_2_timings.csv (every run), results/3_2_summary.md, results/3_2_plans.txt
+------------------------------------------------------------------------------
+3_2_benchmark   finished 2026-10-13 12:09:23.088 CAT   (output saved in results/3_2_benchmark.log)

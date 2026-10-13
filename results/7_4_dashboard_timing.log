@@ -1,0 +1,34 @@
+==============================================================================
+7_4_dashboard_timing   started 2026-10-13 14:21:10.621 CAT   machine Muhirwa
+==============================================================================
+raw      : 10 measured refreshes, 2026-10-13 14:14:23.062 CAT to 2026-10-13 14:15:16.783 CAT, days 2026-09-22 to 2026-09-28, meter 1000000000, machine Muhirwa
+           browser: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36
+aggregate: 10 measured refreshes, 2026-10-13 14:19:15.571 CAT to 2026-10-13 14:19:20.177 CAT, days 2026-09-22 to 2026-09-28, meter 1000000000, machine Muhirwa
+           browser: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36
+Tools     : browser performance.now() for the dashboard time, server time.perf_counter() for query times
+Caching   : none (every refresh re-runs all five queries); 1 warm-up refresh precedes the 10 measured
+
+--- Dashboard timing comparison ---
+measurement (ms)                                     | Raw median | Raw min | Raw max | Aggregate median | Aggregate min | Aggregate max | Raw / Aggregate
+-----------------------------------------------------+------------+---------+---------+------------------+---------------+---------------+----------------
+Panel 1 query: hourly regional energy                | 2,254.5    | 1,924.6 | 2,524.4 | 16.4             | 12.0          | 80.7          | 137.1 x        
+Panel 2 query: daily network energy                  | 2,174.7    | 1,699.5 | 4,534.4 | 38.4             | 19.7          | 70.4          | 56.7 x         
+Panel 3 query: seven-day periods                     | 5,150.1    | 2,247.0 | 6,257.8 | 43.5             | 18.0          | 68.9          | 118.3 x        
+Panel 4 query: selected meter daily                  | 4.3        | 4.0     | 8.1     | 25.6             | 0.9           | 86.1          | 0.2 x          
+Panel 5 query: completeness by region                | 2,076.6    | 1,867.1 | 3,164.1 | 14.8             | 6.3           | 86.9          | 140.6 x        
+Whole dashboard: refresh until all 5 panels rendered | 5,203.1    | 3,757.0 | 6,312.4 | 216.7            | 166.0         | 291.7         | 24.0 x         
+(6 rows)
+
+--- Cost of the aggregates (measured in 6.1) ---
+continuous aggregate | stored rows | storage MB (data + index) | initial refresh s
+---------------------+-------------+---------------------------+------------------
+agg_region_15min     | 26,880      | 4.15                      | 29.19            
+agg_region_hourly    | 6,720       | 1.23                      | 38.11            
+agg_meter_daily      | 112,000     | 12.55                     | 27.35            
+TOTAL                | 145,600     | 17.94                     | 94.65            
+(4 rows)
+
+Each refresh is 4,986 ms faster on Aggregate (median 5,203 ms -> 217 ms).
+The one-off initial refresh (94.6 s) is repaid after about 19 dashboard refreshes.
+------------------------------------------------------------------------------
+7_4_dashboard_timing   finished 2026-10-13 14:21:10.639 CAT   (output saved in results/7_4_dashboard_timing.log)

@@ -1,0 +1,12 @@
+{
+  "received": 1952,
+  "parsed": 1952,
+  "parse_errors": 0,
+  "redelivered": 0,
+  "retained": 0,
+  "inserted": 1952,
+  "insert_errors": 0,
+  "rows_in_energy_live": 1952,
+  "started": "2026-10-13 10:57:45.706 CAT",
+  "finished": "2026-10-13 10:58:37.395 CAT"
+}

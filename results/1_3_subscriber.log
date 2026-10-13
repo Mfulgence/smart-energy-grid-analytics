@@ -1,0 +1,21 @@
+==============================================================================
+1_3_subscriber   started 2026-10-13 10:57:43.578 CAT   machine Muhirwa
+==============================================================================
+energy_live emptied (TRUNCATE) so the pilot starts from zero rows.
+Connected to broker. Subscribing to energy/meters/# at QoS 1 ...
+Subscription confirmed (granted: Granted QoS 1).
+Waiting for messages - now start the publisher in another terminal.
+  received 502   committed 495
+  received 1,004   committed 1,000
+  received 1,507   committed 1,503
+No message for 20 s - stopping.
+
+Messages received by subscriber : 1,952
+  parsed successfully           : 1,952
+  parse errors                  : 0
+  redelivered (DUP flag)        : 0
+Rows inserted and committed     : 1,952
+  failed inserts                : 0
+Rows now in energy_live         : 1,952
+------------------------------------------------------------------------------
+1_3_subscriber   finished 2026-10-13 10:58:37.405 CAT   (output saved in results/1_3_subscriber.log)

@@ -1,0 +1,93 @@
+==============================================================================
+5_3_reporting_quality   started 2026-10-13 13:36:27.618 CAT   machine Muhirwa
+==============================================================================
+
+--- Completeness: whole network ---
+-- 5.3  Completeness of the whole network.
+-- planned = registered meters x 28 days x 96 readings per day.
+-- After cleaning each row is one unique (meter_id, event_time) pair.
+SELECT (SELECT count(*) FROM meters)                                   AS registered_meters,
+       (SELECT count(*) FROM meters) * 28 * 96                         AS planned_readings,
+       count(*)                                                        AS observed_unique_pairs,
+       round(100.0 * count(*) / ((SELECT count(*) FROM meters) * 28 * 96), 6) AS completeness_percent
+FROM energy_readings
+
+registered_meters | planned_readings | observed_unique_pairs | completeness_percent
+------------------+------------------+-----------------------+---------------------
+4,000             | 10,752,000       | 10,643,735            | 98.993071           
+(1 row)
+Time: 506.0 ms
+
+--- Completeness: each region ---
+-- 5.3  Completeness of each region.
+SELECT m.region,
+       registered.meter_count                               AS registered_meters,
+       registered.meter_count * 28 * 96                     AS planned_readings,
+       count(*)                                             AS observed_unique_pairs,
+       registered.meter_count * 28 * 96 - count(*)          AS missing_readings,
+       round(100.0 * count(*) / (registered.meter_count * 28 * 96), 6) AS completeness_percent
+FROM energy_readings r
+JOIN meters m ON m.meter_id = r.meter_id
+JOIN (SELECT region, count(*) AS meter_count FROM meters GROUP BY region) registered
+  ON registered.region = m.region
+GROUP BY m.region, registered.meter_count
+ORDER BY length(m.region), m.region
+
+region    | registered_meters | planned_readings | observed_unique_pairs | missing_readings | completeness_percent
+----------+-------------------+------------------+-----------------------+------------------+---------------------
+Region 1  | 400               | 1,075,200        | 1,064,513             | 10,687           | 99.006045           
+Region 2  | 400               | 1,075,200        | 1,064,419             | 10,781           | 98.997303           
+Region 3  | 400               | 1,075,200        | 1,064,327             | 10,873           | 98.988746           
+Region 4  | 400               | 1,075,200        | 1,064,441             | 10,759           | 98.999349           
+Region 5  | 400               | 1,075,200        | 1,064,290             | 10,910           | 98.985305           
+Region 6  | 400               | 1,075,200        | 1,064,118             | 11,082           | 98.969308           
+Region 7  | 400               | 1,075,200        | 1,064,237             | 10,963           | 98.980376           
+Region 8  | 400               | 1,075,200        | 1,064,587             | 10,613           | 99.012928           
+Region 9  | 400               | 1,075,200        | 1,064,388             | 10,812           | 98.994420           
+Region 10 | 400               | 1,075,200        | 1,064,415             | 10,785           | 98.996931           
+(10 rows)
+Time: 1,847.1 ms
+
+--- 21 September: arrived by 22 Sept 00:00 vs all arrivals ---
+-- 5.3  Energy of 21 September counted twice:
+--   on time = only readings that had ARRIVED (received_time) by 00:00 on 22 Sept
+--   final   = every reading for that day, whenever it arrived
+-- This is the one query that uses received_time.
+SELECT sum(energy_kwh) FILTER (WHERE received_time <= TIMESTAMPTZ '2026-09-22 00:00:00+02')
+                                                              AS energy_arrived_by_midnight_kwh,
+       sum(energy_kwh)                                        AS energy_all_arrivals_kwh,
+       count(*) FILTER (WHERE received_time <= TIMESTAMPTZ '2026-09-22 00:00:00+02')
+                                                              AS readings_arrived_by_midnight,
+       count(*)                                               AS readings_all_arrivals,
+       (SELECT count(*) FROM meters) * 96                     AS planned_readings_for_the_day
+FROM energy_readings
+WHERE event_time >= TIMESTAMPTZ '2026-09-21 00:00:00+02'
+  AND event_time <  TIMESTAMPTZ '2026-09-22 00:00:00+02'
+
+energy_arrived_by_midnight_kwh | energy_all_arrivals_kwh | readings_arrived_by_midnight | readings_all_arrivals | planned_readings_for_the_day
+-------------------------------+-------------------------+------------------------------+-----------------------+-----------------------------
+149,400.544532                 | 149,552.722854          | 379,505                      | 380,036               | 384,000                     
+(1 row)
+Time: 226.7 ms
+
+--- 21 September summary ---
+Measure                                                 | Value                     
+--------------------------------------------------------+---------------------------
+Energy from readings arrived by 22 Sept 00:00 CAT (kWh) | 149,400.545               
+Energy from all arrivals = final total (kWh)            | 149,552.723               
+Difference (kWh)                                        | 152.178                   
+Difference as % of the final total                      | 0.1018 %                  
+Readings arrived by midnight / all arrivals             | 379,505 / 380,036         
+Late readings for this day                              | 531                       
+Planned readings for the day (4,000 x 96)               | 384,000                   
+Readings that never arrived (missing)                   | 3,964 (1.032 % of planned)
+(8 rows)
+
+How to read this
+    Delayed readings: they exist, but arrive up to 3 hours after their interval.
+        A total computed at midnight misses the late ones for the last hours of
+        the day, so the early figure is too LOW and is corrected once they arrive.
+    Missing readings: they never arrive. Even the final total is a slight
+        UNDERCOUNT of true consumption, and no amount of waiting fixes it.
+------------------------------------------------------------------------------
+5_3_reporting_quality   finished 2026-10-13 13:36:30.265 CAT   (output saved in results/5_3_reporting_quality.log)

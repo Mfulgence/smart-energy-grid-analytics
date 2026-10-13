@@ -1,0 +1,30 @@
+==============================================================================
+4_3_compare   started 2026-10-13 13:14:13.223 CAT   machine Muhirwa
+==============================================================================
+Baseline for improvement: energy_readings
+Uncompressed session: 2026-10-13 12:08:18.733 CAT to 2026-10-13 12:09:13.447 CAT (54.7 s)   client: Python 3.12.6 + psycopg 3.3.6 (s32_benchmark.py)
+Compressed session  : 2026-10-13 13:03:37.263 CAT to 2026-10-13 13:03:52.118 CAT (14.9 s)   client: Python 3.12.6 + psycopg 3.3.6 (s32_benchmark.py)
+All results matched : uncompressed True, compressed True
+
+--- WARM-CACHE median ms (min - max), all five configurations ---
+query | energy_readings_3h          | energy_readings           | energy_readings_week    | energy_time_compressed | energy_meter_compressed
+------+-----------------------------+---------------------------+-------------------------+------------------------+------------------------
+Q1    | 156.3 (153.0 - 163.1)       | 174.3 (158.3 - 231.7)     | 163.8 (160.5 - 178.9)   | 420.3 (415.4 - 434.5)  | 569.0 (514.7 - 782.4)  
+Q2    | 222.7 (214.1 - 224.9)       | 218.7 (210.9 - 243.4)     | 272.8 (257.8 - 286.4)   | 168.0 (158.0 - 171.9)  | 158.2 (143.7 - 166.2)  
+Q3    | 3,520.1 (2,952.7 - 3,590.0) | 1,002.4 (990.0 - 1,064.8) | 913.7 (867.5 - 1,007.9) | 250.6 (240.5 - 251.3)  | 246.3 (239.6 - 248.7)  
+Q4    | 6.9 (5.2 - 7.3)             | 2.7 (1.8 - 3.0)           | 1.8 (1.8 - 2.3)         | 86.0 (82.5 - 188.0)    | 2.1 (1.5 - 2.2)        
+Q5    | 981.8 (901.1 - 1,010.9)     | 803.2 (796.7 - 821.7)     | 797.8 (759.9 - 825.4)   | 190.7 (186.7 - 204.5)  | 329.8 (323.9 - 337.9)  
+(5 rows)
+
+--- Improvement = 100 * (baseline median - compressed median) / baseline median ---
+query | baseline median ms (energy_readings) | energy_time_compressed median ms | improvement (time) | vs baseline (time) | energy_meter_compressed median ms | improvement (meter) | vs baseline (meter)
+------+--------------------------------------+----------------------------------+--------------------+--------------------+-----------------------------------+---------------------+--------------------
+Q1    | 174.3                                | 420.3                            | -141.1 %           | slower             | 569.0                             | -226.4 %            | slower             
+Q2    | 218.7                                | 168.0                            | +23.2 %            | faster             | 158.2                             | +27.7 %             | faster             
+Q3    | 1,002.4                              | 250.6                            | +75.0 %            | faster             | 246.3                             | +75.4 %             | faster             
+Q4    | 2.7                                  | 86.0                             | -3065.7 %          | slower             | 2.1                               | +24.0 %             | faster             
+Q5    | 803.2                                | 190.7                            | +76.3 %            | faster             | 329.8                             | +58.9 %             | faster             
+(5 rows)
+Positive = faster than the uncompressed baseline. Negative = slower.
+------------------------------------------------------------------------------
+4_3_compare   finished 2026-10-13 13:14:13.237 CAT   (output saved in results/4_3_compare.log)

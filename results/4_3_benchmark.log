@@ -1,0 +1,260 @@
+==============================================================================
+4_3_benchmark   started 2026-10-13 13:03:28.251 CAT   machine Muhirwa
+==============================================================================
+Client          : Python 3.12.6 + psycopg 3.3.6 (s32_benchmark.py)
+Timing tool     : time.perf_counter() around execute()+fetchall()
+Machine         : Muhirwa
+Cache state     : WARM (1 warm-up before 5 measured runs, no restart, caches not cleared)
+shared_buffers  : 4055MB
+work_mem        : 16221kB
+max_parallel_workers_per_gather: 4
+jit             : off
+ANALYZE energy_time_compressed  done
+ANALYZE energy_meter_compressed  done
+ANALYZE energy_readings  done
+Reference results taken from energy_readings (not timed).
+  Q1 on energy_time_compressed     median      420.3 ms   min      415.4   max      434.5   results match
+  Q1 on energy_meter_compressed    median      569.0 ms   min      514.7   max      782.4   results match
+  Q2 on energy_time_compressed     median      168.0 ms   min      158.0   max      171.9   results match
+  Q2 on energy_meter_compressed    median      158.2 ms   min      143.7   max      166.2   results match
+  Q3 on energy_time_compressed     median      250.6 ms   min      240.5   max      251.3   results match
+  Q3 on energy_meter_compressed    median      246.3 ms   min      239.6   max      248.7   results match
+  Q4 on energy_time_compressed     median       86.0 ms   min       82.5   max      188.0   results match
+  Q4 on energy_meter_compressed    median        2.1 ms   min        1.5   max        2.2   results match
+  Q5 on energy_time_compressed     median      190.7 ms   min      186.7   max      204.5   results match
+  Q5 on energy_meter_compressed    median      329.8 ms   min      323.9   max      337.9   results match
+
+--- Result check against energy_readings (numeric tolerance 0.001) ---
+query | table                   | rows  | status | largest numeric difference
+------+-------------------------+-------+--------+---------------------------
+Q1    | energy_time_compressed  | 24    | MATCH  | 0.000000000               
+Q1    | energy_meter_compressed | 24    | MATCH  | 0.000000000               
+Q2    | energy_time_compressed  | 10    | MATCH  | 0.000000000               
+Q2    | energy_meter_compressed | 10    | MATCH  | 0.000000000               
+Q3    | energy_time_compressed  | 4,000 | MATCH  | 0.000000000               
+Q3    | energy_meter_compressed | 4,000 | MATCH  | 0.000000000               
+Q4    | energy_time_compressed  | 1     | MATCH  | 0.000000000               
+Q4    | energy_meter_compressed | 1     | MATCH  | 0.000000000               
+Q5    | energy_time_compressed  | 1     | MATCH  | 0.000000000               
+Q5    | energy_meter_compressed | 1     | MATCH  | 0.000000000               
+(10 rows)
+
+--- WARM-CACHE timing comparison, milliseconds (5 measured runs after 1 warm-up) ---
+query | table                   | median ms | min ms | max ms
+------+-------------------------+-----------+--------+-------
+Q1    | energy_time_compressed  | 420.3     | 415.4  | 434.5 
+Q1    | energy_meter_compressed | 569.0     | 514.7  | 782.4 
+Q2    | energy_time_compressed  | 168.0     | 158.0  | 171.9 
+Q2    | energy_meter_compressed | 158.2     | 143.7  | 166.2 
+Q3    | energy_time_compressed  | 250.6     | 240.5  | 251.3 
+Q3    | energy_meter_compressed | 246.3     | 239.6  | 248.7 
+Q4    | energy_time_compressed  | 86.0      | 82.5   | 188.0 
+Q4    | energy_meter_compressed | 2.1       | 1.5    | 2.2   
+Q5    | energy_time_compressed  | 190.7     | 186.7  | 204.5 
+Q5    | energy_meter_compressed | 329.8     | 323.9  | 337.9 
+(10 rows)
+
+--- Median ms per table (side by side) ---
+query | energy_time_compressed | energy_meter_compressed | fastest                 | fastest vs slowest                        
+------+------------------------+-------------------------+-------------------------+-------------------------------------------
+Q1    | 420.3                  | 569.0                   | energy_time_compressed  | 1.35 x faster than energy_meter_compressed
+Q2    | 168.0                  | 158.2                   | energy_meter_compressed | 1.06 x faster than energy_time_compressed 
+Q3    | 250.6                  | 246.3                   | energy_meter_compressed | 1.02 x faster than energy_time_compressed 
+Q4    | 86.0                   | 2.1                     | energy_meter_compressed | 41.66 x faster than energy_time_compressed
+Q5    | 190.7                  | 329.8                   | energy_time_compressed  | 1.73 x faster than energy_meter_compressed
+(5 rows)
+
+Session: first warm-up submitted 2026-10-13 13:03:37.263 CAT
+         last measured result    2026-10-13 13:03:52.118 CAT
+         session seconds         14.9
+
+--- EXPLAIN (ANALYZE, BUFFERS) Q4 on energy_time_compressed ---
+-- One meter over one week: energy total, average power and peak power.
+-- Selective on both meter and time, so the (meter_id, event_time) index helps.
+SELECT sum(energy_kwh) AS energy_total_kwh,
+       avg(power_kw)   AS average_power_kw,
+       max(power_kw)   AS peak_power_kw
+FROM energy_time_compressed
+WHERE meter_id = 1000000000
+  AND event_time >= TIMESTAMPTZ '2026-09-22 00:00:00+02'
+  AND event_time <  TIMESTAMPTZ '2026-09-29 00:00:00+02'
+
+Finalize Aggregate  (cost=10632.32..10632.33 rows=1 width=24) (actual time=90.250..97.669 rows=1.00 loops=1)
+  Buffers: shared hit=14353
+  ->  Gather  (cost=1122.48..10632.28 rows=4 width=48) (actual time=8.446..97.639 rows=8.00 loops=1)
+        Workers Planned: 4
+        Workers Launched: 4
+        Buffers: shared hit=14353
+        ->  Parallel Append  (cost=122.48..9631.88 rows=1 width=48) (actual time=1.393..14.745 rows=1.60 loops=5)
+              Buffers: shared hit=14353
+              ->  Custom Scan (VectorAgg)  (cost=122.48..122.49 rows=1 width=48) (actual time=0.849..0.851 rows=0.50 loops=2)
+                    Buffers: shared hit=255
+                    ->  Custom Scan (ColumnarScan) on _hyper_4_281_chunk  (cost=13.06..77.59 rows=5984 width=16) (actual time=0.000..0.001 rows=8.00 loops=1)
+                          Vectorized Filter: ((event_time >= '2026-09-22 00:00:00+02'::timestamp with time zone) AND (event_time < '2026-09-29 00:00:00+02'::timestamp with time zone) AND (meter_id = 1000000000))
+                          Rows Removed by Filter: 7992
+                          ->  Parallel Index Scan using _hyper_4_281_chunk_compressed__ts_meta_v2_first_event_time__idx on _hyper_4_281_chunk_compressed  (cost=0.15..17.75 rows=6 width=148) (actual time=0.299..0.470 rows=4.00 loops=2)
+                                Index Cond: ((_ts_meta_v2_first_event_time >= '2026-09-22 00:00:00+02'::timestamp with time zone) AND (_ts_meta_v2_last_event_time < '2026-09-29 00:00:00+02'::timestamp with time zone))
+                                Filter: _timescaledb_functions.bloom1_contains_any_hashes(_ts_meta_v2_bloomg_meter_id, '{-5521859524179266714}'::bigint[])
+                                Rows Removed by Filter: 12
+                                Index Searches: 1
+                                Buffers: shared hit=159
+              ->  Custom Scan (VectorAgg)  (cost=1254.18..1254.19 rows=1 width=48) (actual time=9.421..9.423 rows=1.00 loops=1)
+                    Buffers: shared hit=1989
+                    ->  Custom Scan (ColumnarScan) on _hyper_4_288_chunk  (cost=10.97..745.64 rows=67805 width=16) (actual time=0.000..0.001 rows=85.00 loops=1)
+                          Vectorized Filter: ((event_time >= '2026-09-22 00:00:00+02'::timestamp with time zone) AND (event_time < '2026-09-29 00:00:00+02'::timestamp with time zone) AND (meter_id = 1000000000))
+                          Rows Removed by Filter: 70332
+                          ->  Parallel Seq Scan on _hyper_4_288_chunk_compressed  (cost=0.00..67.59 rows=68 width=148) (actual time=0.049..2.751 rows=71.00 loops=1)
+                                Filter: ((_ts_meta_v2_first_event_time >= '2026-09-22 00:00:00+02'::timestamp with time zone) AND (_ts_meta_v2_last_event_time < '2026-09-29 00:00:00+02'::timestamp with time zone) AND _timescaledb_functions.bloom1_contains_any_hashes(_ts_meta_v2_bloomg_meter_id, '{-5521859524179266714}'::bigint[]))
+                                Rows Removed by Filter: 278
+                                Buffers: shared hit=1111
+              ->  Custom Scan (VectorAgg)  (cost=1375.86..1375.87 rows=1 width=48) (actual time=10.606..10.608 rows=1.00 loops=1)
+                    Buffers: shared hit=2011
+                    ->  Custom Scan (ColumnarScan) on _hyper_4_282_chunk  (cost=10.86..814.83 rows=74803 width=16) (actual time=0.000..0.001 rows=93.00 loops=1)
+                          Vectorized Filter: (meter_id = 1000000000)
+                          Rows Removed by Filter: 85059
+                          ->  Parallel Seq Scan on _hyper_4_282_chunk_compressed  (cost=0.00..66.80 rows=75 width=100) (actual time=0.041..3.174 rows=86.00 loops=1)
+                                Filter: _timescaledb_functions.bloom1_contains_any_hashes(_ts_meta_v2_bloomg_meter_id, '{-5521859524179266714}'::bigint[])
+                                Rows Removed by Filter: 295
+                                Buffers: shared hit=1207
+              ->  Custom Scan (VectorAgg)  (cost=1375.86..1375.87 rows=1 width=48) (actual time=9.333..9.335 rows=1.00 loops=1)
+                    Buffers: shared hit=2047
+                    ->  Custom Scan (ColumnarScan) on _hyper_4_283_chunk  (cost=10.86..814.83 rows=74803 width=16) (actual time=0.000..0.001 rows=94.00 loops=1)
+                          Vectorized Filter: (meter_id = 1000000000)
+                          Rows Removed by Filter: 89906
+                          ->  Parallel Seq Scan on _hyper_4_283_chunk_compressed  (cost=0.00..66.80 rows=75 width=100) (actual time=0.031..2.808 rows=90.00 loops=1)
+                                Filter: _timescaledb_functions.bloom1_contains_any_hashes(_ts_meta_v2_bloomg_meter_id, '{-5521859524179266714}'::bigint[])
+                                Rows Removed by Filter: 291
+                                Buffers: shared hit=1207
+              ->  Custom Scan (VectorAgg)  (cost=1375.86..1375.87 rows=1 width=48) (actual time=8.598..8.600 rows=1.00 loops=1)
+                    Buffers: shared hit=2038
+                    ->  Custom Scan (ColumnarScan) on _hyper_4_284_chunk  (cost=10.86..814.83 rows=74803 width=16) (actual time=0.000..0.001 rows=95.00 loops=1)
+                          Vectorized Filter: (meter_id = 1000000000)
+                          Rows Removed by Filter: 88090
+                          ->  Parallel Seq Scan on _hyper_4_284_chunk_compressed  (cost=0.00..66.80 rows=75 width=100) (actual time=0.053..2.723 rows=89.00 loops=1)
+                                Filter: _timescaledb_functions.bloom1_contains_any_hashes(_ts_meta_v2_bloomg_meter_id, '{-5521859524179266714}'::bigint[])
+                                Rows Removed by Filter: 292
+                                Buffers: shared hit=1207
+              ->  Custom Scan (VectorAgg)  (cost=1375.86..1375.87 rows=1 width=48) (actual time=14.527..14.530 rows=1.00 loops=1)
+                    Buffers: shared hit=2029
+                    ->  Custom Scan (ColumnarScan) on _hyper_4_285_chunk  (cost=10.86..814.83 rows=74803 width=16) (actual time=0.000..0.001 rows=95.00 loops=1)
+                          Vectorized Filter: (meter_id = 1000000000)
+                          Rows Removed by Filter: 87062
+                          ->  Parallel Seq Scan on _hyper_4_285_chunk_compressed  (cost=0.00..66.80 rows=75 width=100) (actual time=0.048..3.117 rows=88.00 loops=1)
+                                Filter: _timescaledb_functions.bloom1_contains_any_hashes(_ts_meta_v2_bloomg_meter_id, '{-5521859524179266714}'::bigint[])
+                                Rows Removed by Filter: 293
+                                Buffers: shared hit=1207
+              ->  Custom Scan (VectorAgg)  (cost=1375.86..1375.87 rows=1 width=48) (actual time=13.076..13.079 rows=1.00 loops=1)
+                    Buffers: shared hit=1988
+                    ->  Custom Scan (ColumnarScan) on _hyper_4_286_chunk  (cost=10.86..814.83 rows=74803 width=16) (actual time=0.000..0.001 rows=93.00 loops=1)
+                          Vectorized Filter: (meter_id = 1000000000)
+                          Rows Removed by Filter: 84907
+                          ->  Parallel Seq Scan on _hyper_4_286_chunk_compressed  (cost=0.00..66.80 rows=75 width=100) (actual time=0.518..3.549 rows=85.00 loops=1)
+                                Filter: _timescaledb_functions.bloom1_contains_any_hashes(_ts_meta_v2_bloomg_meter_id, '{-5521859524179266714}'::bigint[])
+                                Rows Removed by Filter: 296
+                                Buffers: shared hit=1207
+              ->  Custom Scan (VectorAgg)  (cost=1375.86..1375.87 rows=1 width=48) (actual time=6.403..6.405 rows=1.00 loops=1)
+                    Buffers: shared hit=1996
+                    ->  Custom Scan (ColumnarScan) on _hyper_4_287_chunk  (cost=10.86..814.83 rows=74803 width=16) (actual time=0.000..0.001 rows=96.00 loops=1)
+                          Vectorized Filter: (meter_id = 1000000000)
+                          Rows Removed by Filter: 85904
+                          ->  Parallel Seq Scan on _hyper_4_287_chunk_compressed  (cost=0.00..66.80 rows=75 width=100) (actual time=0.050..2.063 rows=86.00 loops=1)
+                                Filter: _timescaledb_functions.bloom1_contains_any_hashes(_ts_meta_v2_bloomg_meter_id, '{-5521859524179266714}'::bigint[])
+                                Rows Removed by Filter: 295
+                                Buffers: shared hit=1207
+Planning:
+  Buffers: shared hit=87
+Planning Time: 1.207 ms
+Execution Time: 98.087 ms
+
+--- EXPLAIN (ANALYZE, BUFFERS) Q4 on energy_meter_compressed ---
+-- One meter over one week: energy total, average power and peak power.
+-- Selective on both meter and time, so the (meter_id, event_time) index helps.
+SELECT sum(energy_kwh) AS energy_total_kwh,
+       avg(power_kw)   AS average_power_kw,
+       max(power_kw)   AS peak_power_kw
+FROM energy_meter_compressed
+WHERE meter_id = 1000000000
+  AND event_time >= TIMESTAMPTZ '2026-09-22 00:00:00+02'
+  AND event_time <  TIMESTAMPTZ '2026-09-29 00:00:00+02'
+
+Finalize Aggregate  (cost=37.51..37.52 rows=1 width=24) (actual time=0.353..0.357 rows=1.00 loops=1)
+  Buffers: shared hit=78
+  ->  Append  (cost=5.56..37.45 rows=8 width=48) (actual time=0.061..0.349 rows=8.00 loops=1)
+        Buffers: shared hit=78
+        ->  Custom Scan (VectorAgg)  (cost=5.56..5.57 rows=1 width=48) (actual time=0.061..0.062 rows=1.00 loops=1)
+              Buffers: shared hit=12
+              ->  Custom Scan (ColumnarScan) on _hyper_5_310_chunk  (cost=4.85..4.85 rows=95 width=16) (actual time=0.000..0.000 rows=8.00 loops=1)
+                    Vectorized Filter: ((event_time >= '2026-09-22 00:00:00+02'::timestamp with time zone) AND (event_time < '2026-09-29 00:00:00+02'::timestamp with time zone))
+                    Rows Removed by Filter: 86
+                    ->  Index Scan using _hyper_5_310_chunk_compressed_meter_id__ts_meta_v2_first_ev_idx on _hyper_5_310_chunk_compressed  (cost=0.28..3.89 rows=1 width=124) (actual time=0.014..0.014 rows=1.00 loops=1)
+                          Index Cond: ((meter_id = 1000000000) AND (_ts_meta_v2_first_event_time >= '2026-09-22 00:00:00+02'::timestamp with time zone) AND (_ts_meta_v2_last_event_time < '2026-09-29 00:00:00+02'::timestamp with time zone))
+                          Index Searches: 1
+                          Buffers: shared hit=3
+        ->  Custom Scan (VectorAgg)  (cost=4.16..4.17 rows=1 width=48) (actual time=0.045..0.045 rows=1.00 loops=1)
+              Buffers: shared hit=9
+              ->  Custom Scan (ColumnarScan) on _hyper_5_311_chunk  (cost=3.45..3.45 rows=95 width=16) (actual time=0.000..0.000 rows=93.00 loops=1)
+                    ->  Index Scan using _hyper_5_311_chunk_compressed_meter_id__ts_meta_v2_first_ev_idx on _hyper_5_311_chunk_compressed  (cost=0.28..2.50 rows=1 width=76) (actual time=0.014..0.015 rows=1.00 loops=1)
+                          Index Cond: (meter_id = 1000000000)
+                          Index Searches: 1
+                          Buffers: shared hit=3
+        ->  Custom Scan (VectorAgg)  (cost=4.16..4.17 rows=1 width=48) (actual time=0.036..0.036 rows=1.00 loops=1)
+              Buffers: shared hit=9
+              ->  Custom Scan (ColumnarScan) on _hyper_5_312_chunk  (cost=3.45..3.45 rows=95 width=16) (actual time=0.000..0.000 rows=94.00 loops=1)
+                    ->  Index Scan using _hyper_5_312_chunk_compressed_meter_id__ts_meta_v2_first_ev_idx on _hyper_5_312_chunk_compressed  (cost=0.28..2.50 rows=1 width=76) (actual time=0.012..0.012 rows=1.00 loops=1)
+                          Index Cond: (meter_id = 1000000000)
+                          Index Searches: 1
+                          Buffers: shared hit=3
+        ->  Custom Scan (VectorAgg)  (cost=4.16..4.17 rows=1 width=48) (actual time=0.034..0.035 rows=1.00 loops=1)
+              Buffers: shared hit=9
+              ->  Custom Scan (ColumnarScan) on _hyper_5_313_chunk  (cost=3.45..3.45 rows=95 width=16) (actual time=0.000..0.000 rows=95.00 loops=1)
+                    ->  Index Scan using _hyper_5_313_chunk_compressed_meter_id__ts_meta_v2_first_ev_idx on _hyper_5_313_chunk_compressed  (cost=0.28..2.50 rows=1 width=76) (actual time=0.011..0.011 rows=1.00 loops=1)
+                          Index Cond: (meter_id = 1000000000)
+                          Index Searches: 1
+                          Buffers: shared hit=3
+        ->  Custom Scan (VectorAgg)  (cost=4.16..4.17 rows=1 width=48) (actual time=0.033..0.033 rows=1.00 loops=1)
+              Buffers: shared hit=9
+              ->  Custom Scan (ColumnarScan) on _hyper_5_314_chunk  (cost=3.45..3.45 rows=95 width=16) (actual time=0.000..0.000 rows=95.00 loops=1)
+                    ->  Index Scan using _hyper_5_314_chunk_compressed_meter_id__ts_meta_v2_first_ev_idx on _hyper_5_314_chunk_compressed  (cost=0.28..2.50 rows=1 width=76) (actual time=0.010..0.010 rows=1.00 loops=1)
+                          Index Cond: (meter_id = 1000000000)
+                          Index Searches: 1
+                          Buffers: shared hit=3
+        ->  Custom Scan (VectorAgg)  (cost=4.16..4.17 rows=1 width=48) (actual time=0.037..0.038 rows=1.00 loops=1)
+              Buffers: shared hit=9
+              ->  Custom Scan (ColumnarScan) on _hyper_5_315_chunk  (cost=3.45..3.45 rows=95 width=16) (actual time=0.000..0.000 rows=93.00 loops=1)
+                    ->  Index Scan using _hyper_5_315_chunk_compressed_meter_id__ts_meta_v2_first_ev_idx on _hyper_5_315_chunk_compressed  (cost=0.28..2.50 rows=1 width=76) (actual time=0.010..0.010 rows=1.00 loops=1)
+                          Index Cond: (meter_id = 1000000000)
+                          Index Searches: 1
+                          Buffers: shared hit=3
+        ->  Custom Scan (VectorAgg)  (cost=4.16..4.17 rows=1 width=48) (actual time=0.055..0.055 rows=1.00 loops=1)
+              Buffers: shared hit=9
+              ->  Custom Scan (ColumnarScan) on _hyper_5_316_chunk  (cost=3.45..3.45 rows=95 width=16) (actual time=0.000..0.000 rows=96.00 loops=1)
+                    ->  Index Scan using _hyper_5_316_chunk_compressed_meter_id__ts_meta_v2_first_ev_idx on _hyper_5_316_chunk_compressed  (cost=0.28..2.50 rows=1 width=76) (actual time=0.026..0.026 rows=1.00 loops=1)
+                          Index Cond: (meter_id = 1000000000)
+                          Index Searches: 1
+                          Buffers: shared hit=3
+        ->  Custom Scan (VectorAgg)  (cost=6.81..6.82 rows=1 width=48) (actual time=0.041..0.042 rows=1.00 loops=1)
+              Buffers: shared hit=12
+              ->  Custom Scan (ColumnarScan) on _hyper_5_317_chunk  (cost=6.16..6.16 rows=87 width=16) (actual time=0.000..0.000 rows=85.00 loops=1)
+                    Vectorized Filter: ((event_time >= '2026-09-22 00:00:00+02'::timestamp with time zone) AND (event_time < '2026-09-29 00:00:00+02'::timestamp with time zone))
+                    ->  Index Scan using _hyper_5_317_chunk_compressed_meter_id__ts_meta_v2_first_ev_idx on _hyper_5_317_chunk_compressed  (cost=0.28..5.29 rows=1 width=124) (actual time=0.013..0.013 rows=1.00 loops=1)
+                          Index Cond: ((meter_id = 1000000000) AND (_ts_meta_v2_first_event_time >= '2026-09-22 00:00:00+02'::timestamp with time zone) AND (_ts_meta_v2_last_event_time < '2026-09-29 00:00:00+02'::timestamp with time zone))
+                          Index Searches: 1
+                          Buffers: shared hit=3
+Planning:
+  Buffers: shared hit=99
+Planning Time: 1.180 ms
+Execution Time: 0.619 ms
+
+--- Chunks touched by each plan (evidence of chunk exclusion) ---
+query | energy_time_compressed | energy_meter_compressed
+------+------------------------+------------------------
+Q1    | 2                      | 2                      
+Q2    | 8                      | 8                      
+Q3    | 29                     | 29                     
+Q4    | 8                      | 8                      
+Q5    | 29                     | 29                     
+(5 rows)
+
+Saved: results/4_3_timings.csv (every run), results/4_3_summary.md, results/4_3_plans.txt
+------------------------------------------------------------------------------
+4_3_benchmark   finished 2026-10-13 13:03:54.830 CAT   (output saved in results/4_3_benchmark.log)

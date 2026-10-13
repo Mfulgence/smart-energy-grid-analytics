@@ -1,0 +1,175 @@
+==============================================================================
+sql_01_2_create_tables   started 2026-10-13 10:49:01.418 CAT   machine Muhirwa
+==============================================================================
+Connected to database 'energy_grid' as 'postgres' on localhost:5432
+
+[1/10]
+-- ============================================================================
+-- Section 1.2  Create the three database structures
+--     python run_sql.py sql/01_2_create_tables.sql
+-- Safe to run more than once (IF NOT EXISTS everywhere).
+-- ============================================================================
+
+-- ---------------------------------------------------------------------------
+-- energy_live : a REGULAR PostgreSQL table.
+-- It receives the 2,000 pilot messages that travel through MQTT in 1.3.
+-- No primary key and no unique constraint: the generator deliberately emits
+-- duplicate readings and 1.2 says duplicates must be allowed at this stage.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS energy_live (
+    meter_id      BIGINT           NOT NULL,  -- ten-digit meter identifier
+    event_time    TIMESTAMPTZ      NOT NULL,  -- START of the 15-minute interval
+    received_time TIMESTAMPTZ      NOT NULL,  -- simulated arrival time (not insert time)
+    power_kw      DOUBLE PRECISION,           -- average power over the interval, kW
+    voltage_v     DOUBLE PRECISION,           -- volts
+    current_a     DOUBLE PRECISION,           -- amperes
+    frequency_hz  DOUBLE PRECISION,           -- hertz
+    energy_kwh    DOUBLE PRECISION            -- energy used in the interval, kWh
+)
+
+CREATE TABLE
+Time: 56.5 ms
+
+[2/10]
+-- ---------------------------------------------------------------------------
+-- energy_readings : same eight columns, turned into a TimescaleDB HYPERTABLE.
+-- A hypertable looks like one table but is stored as many smaller tables
+-- called chunks. Here each chunk holds one day of event_time.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS energy_readings (
+    meter_id      BIGINT           NOT NULL,
+    event_time    TIMESTAMPTZ      NOT NULL,
+    received_time TIMESTAMPTZ      NOT NULL,
+    power_kw      DOUBLE PRECISION,
+    voltage_v     DOUBLE PRECISION,
+    current_a     DOUBLE PRECISION,
+    frequency_hz  DOUBLE PRECISION,
+    energy_kwh    DOUBLE PRECISION
+)
+
+CREATE TABLE
+Time: 2.3 ms
+
+[3/10]
+-- create_default_indexes => FALSE because we create the two indexes ourselves
+-- below, with explicit names and sort orders, so that all hypertables compared
+-- in Sections 3 and 4 have exactly the same index definitions.
+SELECT create_hypertable(
+    'energy_readings',
+    'event_time',
+    chunk_time_interval    => INTERVAL '1 day',
+    create_default_indexes => FALSE,
+    if_not_exists          => TRUE
+)
+
+create_hypertable                      
+---------------------------------------
+('1', 'public', 'energy_readings', 't')
+(1 row)
+Time: 9.4 ms
+
+[4/10]
+-- Two NON-UNIQUE b-tree indexes (non-unique so duplicates are still accepted):
+--   1. event_time                -> time-range filters across all meters
+--   2. meter_id, then event_time -> one meter over a time range
+CREATE INDEX IF NOT EXISTS energy_readings_time_idx
+    ON energy_readings USING btree (event_time DESC)
+
+CREATE INDEX
+Time: 8.7 ms
+
+[5/10]
+CREATE INDEX IF NOT EXISTS energy_readings_meter_time_idx
+    ON energy_readings USING btree (meter_id, event_time DESC)
+
+CREATE INDEX
+Time: 2.1 ms
+
+[6/10]
+-- ---------------------------------------------------------------------------
+-- meters : one row of descriptive metadata per meter (4,000 rows).
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS meters (
+    meter_id      BIGINT PRIMARY KEY,         -- joins to the reading tables
+    region        TEXT,                       -- 'Region 1' ... 'Region 10'
+    customer_type TEXT,                       -- residential / commercial / industrial
+    base_power_kw DOUBLE PRECISION,           -- typical load of this customer, kW
+    power_factor  DOUBLE PRECISION            -- ratio, no unit (always 0.95)
+)
+
+CREATE TABLE
+Time: 4.5 ms
+
+[7/10]
+-- ---- Evidence for the 1.2 screenshots --------------------------------------
+
+-- Column names and types of all three tables.
+SELECT table_name, ordinal_position AS pos, column_name, data_type, is_nullable
+FROM information_schema.columns
+WHERE table_schema = 'public'
+  AND table_name IN ('energy_live', 'energy_readings', 'meters')
+ORDER BY table_name, ordinal_position
+
+table_name      | pos | column_name   | data_type                | is_nullable
+----------------+-----+---------------+--------------------------+------------
+energy_live     | 1   | meter_id      | bigint                   | NO         
+energy_live     | 2   | event_time    | timestamp with time zone | NO         
+energy_live     | 3   | received_time | timestamp with time zone | NO         
+energy_live     | 4   | power_kw      | double precision         | YES        
+energy_live     | 5   | voltage_v     | double precision         | YES        
+energy_live     | 6   | current_a     | double precision         | YES        
+energy_live     | 7   | frequency_hz  | double precision         | YES        
+energy_live     | 8   | energy_kwh    | double precision         | YES        
+energy_readings | 1   | meter_id      | bigint                   | NO         
+energy_readings | 2   | event_time    | timestamp with time zone | NO         
+energy_readings | 3   | received_time | timestamp with time zone | NO         
+energy_readings | 4   | power_kw      | double precision         | YES        
+energy_readings | 5   | voltage_v     | double precision         | YES        
+energy_readings | 6   | current_a     | double precision         | YES        
+energy_readings | 7   | frequency_hz  | double precision         | YES        
+energy_readings | 8   | energy_kwh    | double precision         | YES        
+meters          | 1   | meter_id      | bigint                   | NO         
+meters          | 2   | region        | text                     | YES        
+meters          | 3   | customer_type | text                     | YES        
+meters          | 4   | base_power_kw | double precision         | YES        
+meters          | 5   | power_factor  | double precision         | YES        
+(21 rows)
+Time: 49.3 ms
+
+[8/10]
+-- energy_readings is a hypertable partitioned by event_time in one-day chunks.
+SELECT hypertable_name, column_name AS partition_column, time_interval::text AS chunk_interval
+FROM timescaledb_information.dimensions
+WHERE hypertable_name = 'energy_readings'
+
+hypertable_name | partition_column | chunk_interval
+----------------+------------------+---------------
+energy_readings | event_time       | 1 day         
+(1 row)
+Time: 1.3 ms
+
+[9/10]
+-- energy_live is NOT a hypertable (it must not appear in this list).
+SELECT hypertable_name FROM timescaledb_information.hypertables ORDER BY hypertable_name
+
+hypertable_name
+---------------
+energy_readings
+(1 row)
+Time: 6.4 ms
+
+[10/10]
+-- Indexes on the hypertable.
+SELECT indexname, indexdef
+FROM pg_indexes
+WHERE schemaname = 'public' AND tablename = 'energy_readings'
+ORDER BY indexname
+
+indexname                      | indexdef                                                                                                     
+-------------------------------+--------------------------------------------------------------------------------------------------------------
+energy_readings_meter_time_idx | CREATE INDEX energy_readings_meter_time_idx ON public.energy_readings USING btree (meter_id, event_time DESC)
+energy_readings_time_idx       | CREATE INDEX energy_readings_time_idx ON public.energy_readings USING btree (event_time DESC)                
+(2 rows)
+Time: 10.0 ms
+------------------------------------------------------------------------------
+sql_01_2_create_tables   finished 2026-10-13 10:49:01.637 CAT   (output saved in results/sql_01_2_create_tables.log)

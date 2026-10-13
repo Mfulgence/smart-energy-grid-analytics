@@ -1,0 +1,192 @@
+==============================================================================
+2_3_clean   started 2026-10-13 11:37:06.020 CAT   machine Muhirwa
+==============================================================================
+
+--- BEFORE cleaning ---
+-- Row count, distinct pairs and total energy. Run before and after the clean.
+-- The inner query makes one row per (meter_id, event_time) pair; the outer
+-- query adds the pairs up. row_count > distinct_pairs means duplicates exist.
+SELECT sum(copies)::bigint AS row_count,
+       count(*)            AS distinct_pairs,
+       sum(pair_energy)    AS total_energy_kwh
+FROM (
+    SELECT count(*) AS copies, sum(energy_kwh) AS pair_energy
+    FROM energy_readings
+    GROUP BY meter_id, event_time
+) pairs
+
+row_count  | distinct_pairs | total_energy_kwh
+-----------+----------------+-----------------
+10,696,848 | 10,643,735     | 3,872,863.893179
+(1 row)
+Time: 29,187.1 ms
+
+--- Find duplicated (meter_id, event_time) pairs ---
+-- Every (meter_id, event_time) that occurs more than once.
+-- The six count(DISTINCT ...) columns compare the six remaining values across
+-- the copies: 1 distinct value means "all copies agree" for that column.
+CREATE TEMP TABLE duplicate_pairs AS
+SELECT meter_id,
+       event_time,
+       count(*)                        AS copies,
+       count(DISTINCT received_time)   AS distinct_received_time,
+       count(DISTINCT power_kw)        AS distinct_power_kw,
+       count(DISTINCT voltage_v)       AS distinct_voltage_v,
+       count(DISTINCT current_a)       AS distinct_current_a,
+       count(DISTINCT frequency_hz)    AS distinct_frequency_hz,
+       count(DISTINCT energy_kwh)      AS distinct_energy_kwh
+FROM energy_readings
+GROUP BY meter_id, event_time
+HAVING count(*) > 1
+
+SELECT 53113
+Time: 48,252.2 ms
+
+--- Do the copies agree in all six values? ---
+-- conflicting_pairs must be 0 before anything is deleted.
+SELECT count(*)                           AS duplicated_pairs,
+       coalesce(sum(copies - 1), 0)::bigint AS extra_copies_to_delete,
+       count(*) FILTER (WHERE distinct_received_time > 1 OR distinct_power_kw > 1
+                           OR distinct_voltage_v > 1 OR distinct_current_a > 1
+                           OR distinct_frequency_hz > 1 OR distinct_energy_kwh > 1)
+                                          AS conflicting_pairs
+FROM duplicate_pairs
+
+duplicated_pairs | extra_copies_to_delete | conflicting_pairs
+-----------------+------------------------+------------------
+53,113           | 53,113                 | 0                
+(1 row)
+Time: 24.8 ms
+
+--- Example duplicated readings (copies are identical) ---
+-- A few duplicated readings shown side by side, as evidence that copies match.
+SELECT r.*
+FROM energy_readings r
+JOIN (SELECT meter_id, event_time FROM duplicate_pairs ORDER BY event_time, meter_id LIMIT 3) d
+  ON d.meter_id = r.meter_id AND d.event_time = r.event_time
+ORDER BY r.meter_id, r.event_time
+
+meter_id   | event_time               | received_time            | power_kw | voltage_v | current_a | frequency_hz | energy_kwh
+-----------+--------------------------+--------------------------+----------+-----------+-----------+--------------+-----------
+1000000062 | 2026-09-01 00:00:00+0200 | 2026-09-01 00:15:00+0200 | 0.150003 | 229.334   | 0.688508  | 50.006       | 0.037501  
+1000000062 | 2026-09-01 00:00:00+0200 | 2026-09-01 00:15:00+0200 | 0.150003 | 229.334   | 0.688508  | 50.006       | 0.037501  
+1000000427 | 2026-09-01 00:00:00+0200 | 2026-09-01 00:15:00+0200 | 0.559966 | 230.334   | 2.559062  | 49.9577      | 0.139992  
+1000000427 | 2026-09-01 00:00:00+0200 | 2026-09-01 00:15:00+0200 | 0.559966 | 230.334   | 2.559062  | 49.9577      | 0.139992  
+1000000578 | 2026-09-01 00:00:00+0200 | 2026-09-01 00:15:00+0200 | 0.238156 | 227.233   | 1.103227  | 49.9901      | 0.059539  
+1000000578 | 2026-09-01 00:00:00+0200 | 2026-09-01 00:15:00+0200 | 0.238156 | 227.233   | 1.103227  | 49.9901      | 0.059539  
+(6 rows)
+Time: 18.6 ms
+
+--- Energy held by the extra copies ---
+-- Energy carried by the copies that are about to be deleted. After cleaning,
+-- total energy must drop by exactly this amount (one copy of each pair stays).
+SELECT coalesce(sum(extra.energy_kwh), 0) AS energy_in_extra_copies_kwh
+FROM (
+    SELECT r.energy_kwh,
+           row_number() OVER (PARTITION BY r.meter_id, r.event_time ORDER BY r.ctid) AS copy_number
+    FROM energy_readings r
+    JOIN duplicate_pairs d ON d.meter_id = r.meter_id AND d.event_time = r.event_time
+) extra
+WHERE extra.copy_number > 1
+
+energy_in_extra_copies_kwh
+--------------------------
+19,159.546363             
+(1 row)
+Time: 3,824.4 ms
+
+--- Delete the extra copies (2026-10-13 11:38:27.403 CAT) ---
+-- How one copy is kept:
+--   * The rows are identical in all eight columns, so no column can tell the
+--     copies apart. PostgreSQL's hidden column ctid (the physical address of a
+--     row) can. In a hypertable each chunk is its own table, so the pair
+--     (tableoid, ctid) identifies exactly one physical row.
+--   * row_number() numbers the copies inside each group of identical rows:
+--     copy 1, copy 2, ...  Copy 1 is retained; copies 2+ are deleted.
+--   * Partitioning by ALL eight columns means only fully identical rows are
+--     ever treated as copies of each other.
+WITH ranked AS (
+    SELECT r.tableoid AS chunk_oid,
+           r.ctid     AS row_address,
+           row_number() OVER (
+               PARTITION BY r.meter_id, r.event_time, r.received_time, r.power_kw,
+                            r.voltage_v, r.current_a, r.frequency_hz, r.energy_kwh
+               ORDER BY r.ctid
+           ) AS copy_number
+    FROM energy_readings r
+    JOIN duplicate_pairs d ON d.meter_id = r.meter_id AND d.event_time = r.event_time
+)
+DELETE FROM energy_readings t
+USING ranked x
+WHERE t.tableoid = x.chunk_oid
+  AND t.ctid     = x.row_address
+  AND x.copy_number > 1
+
+DELETE 53,113  -> committed at 2026-10-13 11:38:48.977 CAT
+
+--- AFTER cleaning ---
+-- Row count, distinct pairs and total energy. Run before and after the clean.
+-- The inner query makes one row per (meter_id, event_time) pair; the outer
+-- query adds the pairs up. row_count > distinct_pairs means duplicates exist.
+SELECT sum(copies)::bigint AS row_count,
+       count(*)            AS distinct_pairs,
+       sum(pair_energy)    AS total_energy_kwh
+FROM (
+    SELECT count(*) AS copies, sum(energy_kwh) AS pair_energy
+    FROM energy_readings
+    GROUP BY meter_id, event_time
+) pairs
+
+row_count  | distinct_pairs | total_energy_kwh
+-----------+----------------+-----------------
+10,643,735 | 10,643,735     | 3,853,704.346816
+(1 row)
+Time: 29,951.7 ms
+
+--- Duplicate pairs remaining (must be 0) ---
+-- Must return 0 after cleaning.
+SELECT count(*) AS duplicate_pairs_remaining
+FROM (SELECT 1 FROM energy_readings GROUP BY meter_id, event_time HAVING count(*) > 1) leftover
+
+duplicate_pairs_remaining
+-------------------------
+0                        
+(1 row)
+Time: 25,425.4 ms
+
+--- Reclaim space and refresh statistics ---
+-- Reclaim the space of the deleted rows and refresh planner statistics.
+VACUUM (ANALYZE) energy_readings
+
+VACUUM
+Time: 13,826.0 ms
+
+--- Before and after ---
+Measure                               | Before           | After            | Change        
+--------------------------------------+------------------+------------------+---------------
+Row count                             | 10,696,848       | 10,643,735       | -53,113       
+Distinct (meter_id, event_time) pairs | 10,643,735       | 10,643,735       | 0             
+Sum of energy_kwh                     | 3,872,863.893179 | 3,853,704.346816 | -19,159.546363
+(3 rows)
+
+--- Verification ---
+Check                                                         | Result
+--------------------------------------------------------------+-------
+Rows deleted = extra copies found                             | OK    
+Final row count = expected unique_readings (10,643,735)       | OK    
+Row count = distinct pairs (one row per pair)                 | OK    
+No duplicate pairs remain                                     | OK    
+Distinct pairs unchanged (no reading lost, gaps kept as gaps) | OK    
+Energy fell by the extra copies' energy (19,159.546363 kWh)   | OK    
+(6 rows)
+
+Why missing readings are NOT turned into zero consumption
+    A missing reading means the utility did not receive a measurement. It does
+    not mean the customer used 0 kWh. Writing zeros would (1) understate energy
+    and bias every total, average and forecast downward, (2) create false
+    "unusual drop" anomalies, and (3) hide the data-quality problem, because
+    completeness would wrongly look like 100%. Keeping the gap keeps the truth:
+    "unknown" stays unknown and completeness can still be measured (5.3).
+RESULT: cleaned dataset verified - use it for every later section
+------------------------------------------------------------------------------
+2_3_clean   finished 2026-10-13 11:39:58.191 CAT   (output saved in results/2_3_clean.log)

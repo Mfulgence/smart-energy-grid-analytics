@@ -1,0 +1,319 @@
+==============================================================================
+6_2_freshness   started 2026-10-13 13:58:10.678 CAT   machine Muhirwa
+==============================================================================
+Recorded time                                        | Value                      
+-----------------------------------------------------+----------------------------
+Actual test time (CAT)                               | 2026-10-13 13:58:10.749 CAT
+H = start of most recent completed CAT hour          | 2026-10-13 12:00:00.000 CAT
+Older hour = H - 48 hours                            | 2026-10-11 12:00:00.000 CAT
+event_time of the 1.0 kWh reading (older hour)       | 2026-10-11 12:10:00.000 CAT
+event_time of the 0.5 kWh reading (older hour, late) | 2026-10-11 12:25:00.000 CAT
+event_time of the 2.0 kWh reading (hour H)           | 2026-10-13 12:10:00.000 CAT
+(6 rows)
+DROP MATERIALIZED VIEW IF EXISTS freshness_hourly CASCADE
+
+DROP MATERIALIZED VIEW
+Time: 2.8 ms
+DROP TABLE IF EXISTS freshness_test
+
+DROP TABLE
+Time: 0.5 ms
+CREATE TABLE freshness_test (
+    event_time TIMESTAMPTZ      NOT NULL,
+    energy_kwh DOUBLE PRECISION NOT NULL
+)
+
+CREATE TABLE
+Time: 34.9 ms
+SELECT create_hypertable('freshness_test', 'event_time')
+
+create_hypertable                     
+--------------------------------------
+('9', 'public', 'freshness_test', 't')
+(1 row)
+Time: 15.7 ms
+-- Hourly sum and row count. Created empty (WITH NO DATA), real-time
+-- aggregation off (materialized_only = TRUE) and NO refresh policy, so the
+-- view only changes when this test refreshes it by hand.
+CREATE MATERIALIZED VIEW freshness_hourly
+WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE) AS
+SELECT time_bucket(INTERVAL '1 hour', event_time, 'Africa/Kigali') AS bucket,
+       sum(energy_kwh) AS energy_kwh_sum,
+       count(*)        AS row_count
+FROM freshness_test
+GROUP BY bucket
+WITH NO DATA
+
+CREATE MATERIALIZED VIEW
+Time: 37.0 ms
+
+--- Test table and view columns ---
+SELECT table_name, column_name, data_type
+FROM information_schema.columns
+WHERE table_name IN ('freshness_test', 'freshness_hourly')
+ORDER BY table_name, ordinal_position
+
+table_name       | column_name    | data_type               
+-----------------+----------------+-------------------------
+freshness_hourly | bucket         | timestamp with time zone
+freshness_hourly | energy_kwh_sum | double precision        
+freshness_hourly | row_count      | bigint                  
+freshness_test   | event_time     | timestamp with time zone
+freshness_test   | energy_kwh     | double precision        
+(5 rows)
+Time: 28.3 ms
+
+--- View definition ---
+SELECT view_name, materialized_only, view_definition
+FROM timescaledb_information.continuous_aggregates
+WHERE view_name = 'freshness_hourly'
+
+view_name        | materialized_only | view_definition                                                                                                                                                                                                                                                   
+-----------------+-------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+freshness_hourly | True              |  SELECT time_bucket('01:00:00'::interval, event_time, 'Africa/Kigali'::text) AS bucket,
+    sum(energy_kwh) AS energy_kwh_sum,
+    count(*) AS row_count
+   FROM freshness_test
+  GROUP BY (time_bucket('01:00:00'::interval, event_time, 'Africa/Kigali'::text));
+(1 row)
+Time: 9.7 ms
+
+--- Automatic refresh is off (no policy on this view) ---
+-- Must return 0: automatic refresh stays off for the whole test.
+SELECT count(*) AS refresh_policies_on_freshness_hourly
+FROM timescaledb_information.jobs j
+JOIN timescaledb_information.continuous_aggregates ca
+  ON j.hypertable_name IN (ca.view_name, ca.materialization_hypertable_name)
+WHERE ca.view_name = 'freshness_hourly'
+
+refresh_policies_on_freshness_hourly
+------------------------------------
+0                                   
+(1 row)
+Time: 6.4 ms
+
+--- Real-time aggregation setting ---
+SELECT view_name, materialized_only,
+       CASE WHEN materialized_only THEN 'OFF' ELSE 'ON' END AS real_time_aggregation
+FROM timescaledb_information.continuous_aggregates
+WHERE view_name = 'freshness_hourly'
+
+view_name        | materialized_only | real_time_aggregation
+-----------------+-------------------+----------------------
+freshness_hourly | True              | OFF                  
+(1 row)
+Time: 2.8 ms
+
+--- Insert 1.0 kWh at 2026-10-11 12:10:00.000 CAT ---
+INSERT INTO freshness_test (event_time, energy_kwh) VALUES (%(event_time)s, %(energy_kwh)s)
+
+INSERT 0 1
+Time: 10.3 ms
+
+--- Refresh ONLY the older hour [2026-10-11 12:00:00.000 CAT , +1 hour) ---
+CALL refresh_continuous_aggregate('freshness_hourly', %(window_start)s::timestamptz, %(window_end)s::timestamptz)
+
+CALL
+Time: 21.8 ms
+
+--- 1 Initial older-hour refresh, real-time off | RAW test table ---
+-- The truth: aggregate the raw test table directly.
+SELECT time_bucket(INTERVAL '1 hour', event_time, 'Africa/Kigali') AS hour,
+       sum(energy_kwh) AS energy_kwh_sum,
+       count(*)        AS row_count
+FROM freshness_test
+WHERE event_time >= %(older)s AND event_time < %(h_end)s
+GROUP BY hour
+ORDER BY hour
+
+hour                     | energy_kwh_sum | row_count
+-------------------------+----------------+----------
+2026-10-11 12:00:00+0200 | 1              | 1        
+(1 row)
+Time: 6.1 ms
+
+--- 1 Initial older-hour refresh, real-time off | AGGREGATE ---
+-- What the continuous aggregate returns for the same two hours.
+SELECT bucket AS hour, energy_kwh_sum, row_count
+FROM freshness_hourly
+WHERE bucket IN (%(older)s, %(h)s)
+ORDER BY bucket
+
+hour                     | energy_kwh_sum | row_count
+-------------------------+----------------+----------
+2026-10-11 12:00:00+0200 | 1              | 1        
+(1 row)
+Time: 2.2 ms
+
+--- Insert 0.5 kWh at 2026-10-11 12:25:00.000 CAT (late arrival for the older hour) ---
+INSERT INTO freshness_test (event_time, energy_kwh) VALUES (%(event_time)s, %(energy_kwh)s)
+
+INSERT 0 1
+Time: 1.9 ms
+
+--- Insert 2.0 kWh at 2026-10-13 12:10:00.000 CAT (hour H) ---
+INSERT INTO freshness_test (event_time, energy_kwh) VALUES (%(event_time)s, %(energy_kwh)s)
+
+INSERT 0 1
+Time: 0.7 ms
+
+--- 2 After both new inserts, before refresh, real-time off | RAW test table ---
+-- The truth: aggregate the raw test table directly.
+SELECT time_bucket(INTERVAL '1 hour', event_time, 'Africa/Kigali') AS hour,
+       sum(energy_kwh) AS energy_kwh_sum,
+       count(*)        AS row_count
+FROM freshness_test
+WHERE event_time >= %(older)s AND event_time < %(h_end)s
+GROUP BY hour
+ORDER BY hour
+
+hour                     | energy_kwh_sum | row_count
+-------------------------+----------------+----------
+2026-10-11 12:00:00+0200 | 1.5            | 2        
+2026-10-13 12:00:00+0200 | 2              | 1        
+(2 rows)
+Time: 0.7 ms
+
+--- 2 After both new inserts, before refresh, real-time off | AGGREGATE ---
+-- What the continuous aggregate returns for the same two hours.
+SELECT bucket AS hour, energy_kwh_sum, row_count
+FROM freshness_hourly
+WHERE bucket IN (%(older)s, %(h)s)
+ORDER BY bucket
+
+hour                     | energy_kwh_sum | row_count
+-------------------------+----------------+----------
+2026-10-11 12:00:00+0200 | 1              | 1        
+(1 row)
+Time: 0.5 ms
+
+--- Enable real-time aggregation ---
+-- materialized_only = FALSE switches real-time aggregation ON: a query now
+-- returns the stored buckets PLUS raw rows newer than the last refreshed point.
+ALTER MATERIALIZED VIEW freshness_hourly SET (timescaledb.materialized_only = FALSE)
+
+ALTER MATERIALIZED VIEW
+Time: 22.7 ms
+
+--- Real-time aggregation setting ---
+SELECT view_name, materialized_only,
+       CASE WHEN materialized_only THEN 'OFF' ELSE 'ON' END AS real_time_aggregation
+FROM timescaledb_information.continuous_aggregates
+WHERE view_name = 'freshness_hourly'
+
+view_name        | materialized_only | real_time_aggregation
+-----------------+-------------------+----------------------
+freshness_hourly | False             | ON                   
+(1 row)
+Time: 2.6 ms
+
+--- 3 Real-time on, still before refresh | RAW test table ---
+-- The truth: aggregate the raw test table directly.
+SELECT time_bucket(INTERVAL '1 hour', event_time, 'Africa/Kigali') AS hour,
+       sum(energy_kwh) AS energy_kwh_sum,
+       count(*)        AS row_count
+FROM freshness_test
+WHERE event_time >= %(older)s AND event_time < %(h_end)s
+GROUP BY hour
+ORDER BY hour
+
+hour                     | energy_kwh_sum | row_count
+-------------------------+----------------+----------
+2026-10-11 12:00:00+0200 | 1.5            | 2        
+2026-10-13 12:00:00+0200 | 2              | 1        
+(2 rows)
+Time: 0.7 ms
+
+--- 3 Real-time on, still before refresh | AGGREGATE ---
+-- What the continuous aggregate returns for the same two hours.
+SELECT bucket AS hour, energy_kwh_sum, row_count
+FROM freshness_hourly
+WHERE bucket IN (%(older)s, %(h)s)
+ORDER BY bucket
+
+hour                     | energy_kwh_sum | row_count
+-------------------------+----------------+----------
+2026-10-11 12:00:00+0200 | 1              | 1        
+2026-10-13 12:00:00+0200 | 2              | 1        
+(2 rows)
+Time: 1.1 ms
+
+--- Refresh the older hour ---
+CALL refresh_continuous_aggregate('freshness_hourly', %(window_start)s::timestamptz, %(window_end)s::timestamptz)
+
+CALL
+Time: 2.6 ms
+
+--- Refresh hour H ---
+CALL refresh_continuous_aggregate('freshness_hourly', %(window_start)s::timestamptz, %(window_end)s::timestamptz)
+
+CALL
+Time: 2.4 ms
+
+--- 4 After manual refresh of both hours | RAW test table ---
+-- The truth: aggregate the raw test table directly.
+SELECT time_bucket(INTERVAL '1 hour', event_time, 'Africa/Kigali') AS hour,
+       sum(energy_kwh) AS energy_kwh_sum,
+       count(*)        AS row_count
+FROM freshness_test
+WHERE event_time >= %(older)s AND event_time < %(h_end)s
+GROUP BY hour
+ORDER BY hour
+
+hour                     | energy_kwh_sum | row_count
+-------------------------+----------------+----------
+2026-10-11 12:00:00+0200 | 1.5            | 2        
+2026-10-13 12:00:00+0200 | 2              | 1        
+(2 rows)
+Time: 1.1 ms
+
+--- 4 After manual refresh of both hours | AGGREGATE ---
+-- What the continuous aggregate returns for the same two hours.
+SELECT bucket AS hour, energy_kwh_sum, row_count
+FROM freshness_hourly
+WHERE bucket IN (%(older)s, %(h)s)
+ORDER BY bucket
+
+hour                     | energy_kwh_sum | row_count
+-------------------------+----------------+----------
+2026-10-11 12:00:00+0200 | 1.5            | 2        
+2026-10-13 12:00:00+0200 | 2              | 1        
+(2 rows)
+Time: 1.1 ms
+
+--- Stage comparison ---
+stage                                                   | raw older hour  | raw hour H         | aggregate older hour | aggregate hour H   | as expected
+--------------------------------------------------------+-----------------+--------------------+----------------------+--------------------+------------
+1 Initial older-hour refresh, real-time off             | 1 kWh, 1 row    | no bucket returned | 1 kWh, 1 row         | no bucket returned | YES        
+2 After both new inserts, before refresh, real-time off | 1.5 kWh, 2 rows | 2 kWh, 1 row       | 1 kWh, 1 row         | no bucket returned | YES        
+3 Real-time on, still before refresh                    | 1.5 kWh, 2 rows | 2 kWh, 1 row       | 1 kWh, 1 row         | 2 kWh, 1 row       | YES        
+4 After manual refresh of both hours                    | 1.5 kWh, 2 rows | 2 kWh, 1 row       | 1.5 kWh, 2 rows      | 2 kWh, 1 row       | YES        
+(4 rows)
+
+--- What a 6.1-style policy (3-day lookback, 1-hour end offset) could refresh at the test time ---
+Question                                               | Answer                                                      
+-------------------------------------------------------+-------------------------------------------------------------
+Policy window at test time                             | 2026-10-10 13:58:10.749 CAT  to  2026-10-13 12:58:10.749 CAT
+Hourly buckets fully inside the window                 | 2026-10-10 14:00  to  2026-10-13 11:00 (bucket starts)      
+Older hour 2026-10-11 12:00 refreshable by the policy? | YES                                                         
+Hour H 2026-10-13 12:00 refreshable by the policy?     | NO (it ends at 13:00, after the window end 12:58)           
+(4 rows)
+
+What became visible at each stage
+    Stage 1  The refresh materialized the older hour: 1 kWh, 1 row. Hour H has
+             no data and no stored bucket.
+    Stage 2  The raw table already holds all three rows, but the aggregate is
+             unchanged. With real-time off it returns ONLY stored buckets, so
+             neither the late 0.5 kWh nor the new 2 kWh is visible.
+    Stage 3  Real-time aggregation adds raw rows NEWER than the last refreshed
+             point (the watermark, which is the end of the older hour). Hour H
+             is newer, so its 2 kWh appears. The late 0.5 kWh lies in an hour
+             that is already materialized, BEHIND the watermark, so real-time
+             aggregation does not see it: the older hour still shows 1 kWh.
+    Stage 4  A refresh recomputes the invalidated older hour (now 1.5 kWh,
+             2 rows) and materializes hour H (2 kWh, 1 row). Aggregate = raw.
+    Lesson   Late arrivals into already-materialized buckets only appear after
+             a refresh that covers them. That is what the lookback is for.
+RESULT: all four stages match the expected table
+------------------------------------------------------------------------------
+6_2_freshness   finished 2026-10-13 13:58:10.976 CAT   (output saved in results/6_2_freshness.log)

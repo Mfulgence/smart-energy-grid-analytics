@@ -1,0 +1,377 @@
+==============================================================================
+4_1_load_and_compress   started 2026-10-13 12:47:36.878 CAT   machine Muhirwa
+==============================================================================
+Baseline table      : energy_readings  (chunk interval 1 day, 0:00:00)
+Experiment start    : 2026-10-13 12:47:36.955 CAT
+Compression cutoff  : 2026-10-11 12:47:36.955 CAT   (= start - 48 hours, used for BOTH tables)
+Rule                : a chunk is compressed when its range_end is earlier than the cutoff
+DROP TABLE IF EXISTS energy_time_compressed, energy_meter_compressed
+
+DROP TABLE
+Time: 1.6 ms
+CREATE TABLE energy_time_compressed (LIKE energy_readings)
+
+CREATE TABLE
+Time: 6.1 ms
+CREATE TABLE energy_meter_compressed (LIKE energy_readings)
+
+CREATE TABLE
+Time: 11.3 ms
+SELECT create_hypertable('energy_time_compressed', 'event_time',
+                         chunk_time_interval    => INTERVAL '86400 seconds',
+                         create_default_indexes => FALSE)
+
+create_hypertable                             
+----------------------------------------------
+('4', 'public', 'energy_time_compressed', 't')
+(1 row)
+Time: 39.4 ms
+SELECT create_hypertable('energy_meter_compressed', 'event_time',
+                         chunk_time_interval    => INTERVAL '86400 seconds',
+                         create_default_indexes => FALSE)
+
+create_hypertable                              
+-----------------------------------------------
+('5', 'public', 'energy_meter_compressed', 't')
+(1 row)
+Time: 9.0 ms
+CREATE INDEX energy_time_compressed_time_idx
+    ON energy_time_compressed USING btree (event_time DESC)
+
+CREATE INDEX
+Time: 3.6 ms
+CREATE INDEX energy_time_compressed_meter_time_idx
+    ON energy_time_compressed USING btree (meter_id, event_time DESC)
+
+CREATE INDEX
+Time: 2.2 ms
+CREATE INDEX energy_meter_compressed_time_idx
+    ON energy_meter_compressed USING btree (event_time DESC)
+
+CREATE INDEX
+Time: 2.7 ms
+CREATE INDEX energy_meter_compressed_meter_time_idx
+    ON energy_meter_compressed USING btree (meter_id, event_time DESC)
+
+CREATE INDEX
+Time: 2.7 ms
+-- Strategy 1: time ordering only. The empty string switches segmentation OFF
+-- explicitly (newer TimescaleDB versions would otherwise pick a default).
+ALTER TABLE energy_time_compressed SET (
+    timescaledb.compress,
+    timescaledb.compress_orderby   = 'event_time DESC',
+    timescaledb.compress_segmentby = ''
+)
+
+ALTER TABLE
+Time: 5.8 ms
+-- Strategy 2: the same ordering, segmented by meter.
+ALTER TABLE energy_meter_compressed SET (
+    timescaledb.compress,
+    timescaledb.compress_orderby   = 'event_time DESC',
+    timescaledb.compress_segmentby = 'meter_id'
+)
+
+ALTER TABLE
+Time: 0.9 ms
+-- Policy: automatically compress chunks whose END is more than 48 hours old.
+SELECT add_compression_policy('energy_time_compressed', compress_after => INTERVAL '48 hours') AS job_id
+
+job_id
+------
+1,000 
+(1 row)
+Time: 4.8 ms
+SELECT add_compression_policy('energy_meter_compressed', compress_after => INTERVAL '48 hours') AS job_id
+
+job_id
+------
+1,001 
+(1 row)
+Time: 1.2 ms
+-- Pause both policies until the 4.3 measurements are complete, so that every
+-- compression in this experiment is the manual, individually timed one.
+SELECT job_id, alter_job(job_id, scheduled => false) IS NOT NULL AS paused
+FROM timescaledb_information.jobs
+WHERE proc_name IN ('policy_compression', 'policy_columnstore')
+  AND hypertable_name IN ('energy_time_compressed', 'energy_meter_compressed')
+
+job_id | paused
+-------+-------
+1,000  | False 
+1,001  | False 
+(2 rows)
+Time: 9.2 ms
+
+--- Both configurations ---
+SELECT d.hypertable_name, d.time_interval::text AS chunk_interval,
+       h.compression_enabled
+FROM timescaledb_information.dimensions d
+JOIN timescaledb_information.hypertables h USING (hypertable_name)
+WHERE d.hypertable_name IN ('energy_time_compressed', 'energy_meter_compressed')
+ORDER BY d.hypertable_name
+
+hypertable_name         | chunk_interval | compression_enabled
+------------------------+----------------+--------------------
+energy_meter_compressed | 1 day          | True               
+energy_time_compressed  | 1 day          | True               
+(2 rows)
+Time: 10.3 ms
+
+--- Compression settings (orderby / segmentby) ---
+-- orderby / segmentby actually stored for each table.
+SELECT hypertable_name, attname AS column_name,
+       segmentby_column_index AS segmentby_position,
+       orderby_column_index   AS orderby_position,
+       CASE WHEN orderby_column_index IS NULL THEN NULL
+            WHEN orderby_asc THEN 'ASC' ELSE 'DESC' END AS order_direction
+FROM timescaledb_information.compression_settings
+WHERE hypertable_name IN ('energy_time_compressed', 'energy_meter_compressed')
+ORDER BY hypertable_name, segmentby_column_index NULLS LAST, orderby_column_index
+
+hypertable_name         | column_name | segmentby_position | orderby_position | order_direction
+------------------------+-------------+--------------------+------------------+----------------
+energy_meter_compressed | meter_id    | 1                  | NULL             | NULL           
+energy_meter_compressed | event_time  | NULL               | 1                | DESC           
+energy_time_compressed  | event_time  | NULL               | 1                | DESC           
+(3 rows)
+Time: 1.8 ms
+
+--- Compression policies (enabled = false means paused) ---
+SELECT job_id, hypertable_name, proc_name AS policy, schedule_interval::text AS runs_every,
+       config::text AS settings, scheduled AS enabled
+FROM timescaledb_information.jobs
+WHERE hypertable_name IN ('energy_time_compressed', 'energy_meter_compressed')
+ORDER BY hypertable_name
+
+job_id | hypertable_name         | policy             | runs_every | settings                                           | enabled
+-------+-------------------------+--------------------+------------+----------------------------------------------------+--------
+1,001  | energy_meter_compressed | policy_compression | 12:00:00   | {"hypertable_id": 5, "compress_after": "48:00:00"} | False  
+1,000  | energy_time_compressed  | policy_compression | 12:00:00   | {"hypertable_id": 4, "compress_after": "48:00:00"} | False  
+(2 rows)
+Time: 0.8 ms
+
+energy_readings has 29 chunks. Copying them one at a time.
+
+--- Loading and compressing energy_time_compressed ---
+-- Copy exactly one chunk's time range from the cleaned baseline table.
+INSERT INTO energy_time_compressed
+SELECT * FROM energy_readings
+WHERE event_time >= %(range_start)s AND event_time < %(range_end)s
+ORDER BY event_time, meter_id
+
+  chunk   1/29  2026-08-31 02:00 to 2026-09-01 02:00  rows    31,717  load   0.15 s  compress   0.11 s
+  chunk   2/29  2026-09-01 02:00 to 2026-09-02 02:00  rows   380,089  load   1.95 s  compress   0.43 s
+  chunk   3/29  2026-09-02 02:00 to 2026-09-03 02:00  rows   380,087  load   2.53 s  compress   0.51 s
+  chunk   4/29  2026-09-03 02:00 to 2026-09-04 02:00  rows   380,151  load   2.36 s  compress   0.46 s
+  chunk   5/29  2026-09-04 02:00 to 2026-09-05 02:00  rows   380,019  load   2.65 s  compress   0.45 s
+  chunk   6/29  2026-09-05 02:00 to 2026-09-06 02:00  rows   380,126  load   2.50 s  compress   0.49 s
+  chunk   7/29  2026-09-06 02:00 to 2026-09-07 02:00  rows   380,144  load   2.39 s  compress   0.51 s
+  chunk   8/29  2026-09-07 02:00 to 2026-09-08 02:00  rows   380,113  load   2.55 s  compress   0.46 s
+  chunk   9/29  2026-09-08 02:00 to 2026-09-09 02:00  rows   380,122  load   2.52 s  compress   0.51 s
+  chunk  10/29  2026-09-09 02:00 to 2026-09-10 02:00  rows   380,149  load   2.69 s  compress   0.48 s
+  chunk  11/29  2026-09-10 02:00 to 2026-09-11 02:00  rows   380,123  load   3.16 s  compress   0.47 s
+  chunk  12/29  2026-09-11 02:00 to 2026-09-12 02:00  rows   380,123  load   2.67 s  compress   0.60 s
+  chunk  13/29  2026-09-12 02:00 to 2026-09-13 02:00  rows   380,151  load   2.96 s  compress   0.67 s
+  chunk  14/29  2026-09-13 02:00 to 2026-09-14 02:00  rows   380,203  load   2.97 s  compress   0.66 s
+  chunk  15/29  2026-09-14 02:00 to 2026-09-15 02:00  rows   380,096  load   2.76 s  compress   0.49 s
+  chunk  16/29  2026-09-15 02:00 to 2026-09-16 02:00  rows   380,100  load   2.45 s  compress   0.50 s
+  chunk  17/29  2026-09-16 02:00 to 2026-09-17 02:00  rows   380,156  load   2.70 s  compress   0.64 s
+  chunk  18/29  2026-09-17 02:00 to 2026-09-18 02:00  rows   380,204  load   4.47 s  compress   0.76 s
+  chunk  19/29  2026-09-18 02:00 to 2026-09-19 02:00  rows   380,088  load   4.40 s  compress   0.75 s
+  chunk  20/29  2026-09-19 02:00 to 2026-09-20 02:00  rows   380,211  load   3.67 s  compress   0.82 s
+  chunk  21/29  2026-09-20 02:00 to 2026-09-21 02:00  rows   380,212  load   3.84 s  compress   0.79 s
+  chunk  22/29  2026-09-21 02:00 to 2026-09-22 02:00  rows   380,053  load   4.53 s  compress   0.95 s
+  chunk  23/29  2026-09-22 02:00 to 2026-09-23 02:00  rows   380,152  load   7.09 s  compress   0.84 s
+  chunk  24/29  2026-09-23 02:00 to 2026-09-24 02:00  rows   380,121  load   3.79 s  compress   0.74 s
+  chunk  25/29  2026-09-24 02:00 to 2026-09-25 02:00  rows   380,185  load   3.77 s  compress   0.86 s
+  chunk  26/29  2026-09-25 02:00 to 2026-09-26 02:00  rows   380,157  load   3.90 s  compress   0.94 s
+  chunk  27/29  2026-09-26 02:00 to 2026-09-27 02:00  rows   380,119  load   4.54 s  compress   1.08 s
+  chunk  28/29  2026-09-27 02:00 to 2026-09-28 02:00  rows   380,147  load   8.02 s  compress   0.88 s
+  chunk  29/29  2026-09-28 02:00 to 2026-09-29 02:00  rows   348,417  load   3.64 s  compress   0.61 s
+  energy_time_compressed: 10,643,735 rows, load 97.6 s, compression 18.5 s (29 of 29 chunks compressed)
+
+--- Loading and compressing energy_meter_compressed ---
+-- Copy exactly one chunk's time range from the cleaned baseline table.
+INSERT INTO energy_meter_compressed
+SELECT * FROM energy_readings
+WHERE event_time >= %(range_start)s AND event_time < %(range_end)s
+ORDER BY event_time, meter_id
+
+  chunk   1/29  2026-08-31 02:00 to 2026-09-01 02:00  rows    31,717  load   0.25 s  compress   0.28 s
+  chunk   2/29  2026-09-01 02:00 to 2026-09-02 02:00  rows   380,089  load   4.21 s  compress   1.20 s
+  chunk   3/29  2026-09-02 02:00 to 2026-09-03 02:00  rows   380,087  load   4.06 s  compress   1.13 s
+  chunk   4/29  2026-09-03 02:00 to 2026-09-04 02:00  rows   380,151  load   4.63 s  compress   1.91 s
+  chunk   5/29  2026-09-04 02:00 to 2026-09-05 02:00  rows   380,019  load   7.80 s  compress   1.33 s
+  chunk   6/29  2026-09-05 02:00 to 2026-09-06 02:00  rows   380,126  load   4.18 s  compress   1.15 s
+  chunk   7/29  2026-09-06 02:00 to 2026-09-07 02:00  rows   380,144  load   3.45 s  compress   1.22 s
+  chunk   8/29  2026-09-07 02:00 to 2026-09-08 02:00  rows   380,113  load   3.71 s  compress   1.04 s
+  chunk   9/29  2026-09-08 02:00 to 2026-09-09 02:00  rows   380,122  load   5.02 s  compress   1.66 s
+  chunk  10/29  2026-09-09 02:00 to 2026-09-10 02:00  rows   380,149  load  13.01 s  compress   1.77 s
+  chunk  11/29  2026-09-10 02:00 to 2026-09-11 02:00  rows   380,123  load   3.87 s  compress   1.16 s
+  chunk  12/29  2026-09-11 02:00 to 2026-09-12 02:00  rows   380,123  load   8.16 s  compress   1.78 s
+  chunk  13/29  2026-09-12 02:00 to 2026-09-13 02:00  rows   380,151  load   3.85 s  compress   1.11 s
+  chunk  14/29  2026-09-13 02:00 to 2026-09-14 02:00  rows   380,203  load   4.99 s  compress   4.71 s
+  chunk  15/29  2026-09-14 02:00 to 2026-09-15 02:00  rows   380,096  load   8.73 s  compress   0.83 s
+  chunk  16/29  2026-09-15 02:00 to 2026-09-16 02:00  rows   380,100  load   2.34 s  compress   0.82 s
+  chunk  17/29  2026-09-16 02:00 to 2026-09-17 02:00  rows   380,156  load   2.43 s  compress   1.36 s
+  chunk  18/29  2026-09-17 02:00 to 2026-09-18 02:00  rows   380,204  load   2.95 s  compress   1.51 s
+  chunk  19/29  2026-09-18 02:00 to 2026-09-19 02:00  rows   380,088  load   4.70 s  compress   1.70 s
+  chunk  20/29  2026-09-19 02:00 to 2026-09-20 02:00  rows   380,211  load   2.67 s  compress   0.82 s
+  chunk  21/29  2026-09-20 02:00 to 2026-09-21 02:00  rows   380,212  load   2.82 s  compress   1.05 s
+  chunk  22/29  2026-09-21 02:00 to 2026-09-22 02:00  rows   380,053  load   3.61 s  compress   2.63 s
+  chunk  23/29  2026-09-22 02:00 to 2026-09-23 02:00  rows   380,152  load   4.97 s  compress   0.79 s
+  chunk  24/29  2026-09-23 02:00 to 2026-09-24 02:00  rows   380,121  load   2.81 s  compress   1.03 s
+  chunk  25/29  2026-09-24 02:00 to 2026-09-25 02:00  rows   380,185  load   3.71 s  compress   1.04 s
+  chunk  26/29  2026-09-25 02:00 to 2026-09-26 02:00  rows   380,157  load   3.62 s  compress   1.20 s
+  chunk  27/29  2026-09-26 02:00 to 2026-09-27 02:00  rows   380,119  load   4.11 s  compress   2.04 s
+  chunk  28/29  2026-09-27 02:00 to 2026-09-28 02:00  rows   380,147  load   3.20 s  compress   0.81 s
+  chunk  29/29  2026-09-28 02:00 to 2026-09-29 02:00  rows   348,417  load   2.72 s  compress   1.17 s
+  energy_meter_compressed: 10,643,735 rows, load 126.6 s, compression 40.3 s (29 of 29 chunks compressed)
+
+--- Compressed-chunk list ---
+-- Final state of every chunk in both tables.
+SELECT hypertable_name, chunk_name, range_start, range_end, is_compressed
+FROM timescaledb_information.chunks
+WHERE hypertable_name IN ('energy_time_compressed', 'energy_meter_compressed')
+ORDER BY hypertable_name, range_start
+
+hypertable_name         | chunk_name         | range_start              | range_end                | is_compressed
+------------------------+--------------------+--------------------------+--------------------------+--------------
+energy_meter_compressed | _hyper_5_289_chunk | 2026-08-31 02:00:00+0200 | 2026-09-01 02:00:00+0200 | True         
+energy_meter_compressed | _hyper_5_290_chunk | 2026-09-01 02:00:00+0200 | 2026-09-02 02:00:00+0200 | True         
+energy_meter_compressed | _hyper_5_291_chunk | 2026-09-02 02:00:00+0200 | 2026-09-03 02:00:00+0200 | True         
+energy_meter_compressed | _hyper_5_292_chunk | 2026-09-03 02:00:00+0200 | 2026-09-04 02:00:00+0200 | True         
+energy_meter_compressed | _hyper_5_293_chunk | 2026-09-04 02:00:00+0200 | 2026-09-05 02:00:00+0200 | True         
+energy_meter_compressed | _hyper_5_294_chunk | 2026-09-05 02:00:00+0200 | 2026-09-06 02:00:00+0200 | True         
+energy_meter_compressed | _hyper_5_295_chunk | 2026-09-06 02:00:00+0200 | 2026-09-07 02:00:00+0200 | True         
+energy_meter_compressed | _hyper_5_296_chunk | 2026-09-07 02:00:00+0200 | 2026-09-08 02:00:00+0200 | True         
+energy_meter_compressed | _hyper_5_297_chunk | 2026-09-08 02:00:00+0200 | 2026-09-09 02:00:00+0200 | True         
+energy_meter_compressed | _hyper_5_298_chunk | 2026-09-09 02:00:00+0200 | 2026-09-10 02:00:00+0200 | True         
+energy_meter_compressed | _hyper_5_299_chunk | 2026-09-10 02:00:00+0200 | 2026-09-11 02:00:00+0200 | True         
+energy_meter_compressed | _hyper_5_300_chunk | 2026-09-11 02:00:00+0200 | 2026-09-12 02:00:00+0200 | True         
+energy_meter_compressed | _hyper_5_301_chunk | 2026-09-12 02:00:00+0200 | 2026-09-13 02:00:00+0200 | True         
+energy_meter_compressed | _hyper_5_302_chunk | 2026-09-13 02:00:00+0200 | 2026-09-14 02:00:00+0200 | True         
+energy_meter_compressed | _hyper_5_303_chunk | 2026-09-14 02:00:00+0200 | 2026-09-15 02:00:00+0200 | True         
+energy_meter_compressed | _hyper_5_304_chunk | 2026-09-15 02:00:00+0200 | 2026-09-16 02:00:00+0200 | True         
+energy_meter_compressed | _hyper_5_305_chunk | 2026-09-16 02:00:00+0200 | 2026-09-17 02:00:00+0200 | True         
+energy_meter_compressed | _hyper_5_306_chunk | 2026-09-17 02:00:00+0200 | 2026-09-18 02:00:00+0200 | True         
+energy_meter_compressed | _hyper_5_307_chunk | 2026-09-18 02:00:00+0200 | 2026-09-19 02:00:00+0200 | True         
+energy_meter_compressed | _hyper_5_308_chunk | 2026-09-19 02:00:00+0200 | 2026-09-20 02:00:00+0200 | True         
+energy_meter_compressed | _hyper_5_309_chunk | 2026-09-20 02:00:00+0200 | 2026-09-21 02:00:00+0200 | True         
+energy_meter_compressed | _hyper_5_310_chunk | 2026-09-21 02:00:00+0200 | 2026-09-22 02:00:00+0200 | True         
+energy_meter_compressed | _hyper_5_311_chunk | 2026-09-22 02:00:00+0200 | 2026-09-23 02:00:00+0200 | True         
+energy_meter_compressed | _hyper_5_312_chunk | 2026-09-23 02:00:00+0200 | 2026-09-24 02:00:00+0200 | True         
+energy_meter_compressed | _hyper_5_313_chunk | 2026-09-24 02:00:00+0200 | 2026-09-25 02:00:00+0200 | True         
+energy_meter_compressed | _hyper_5_314_chunk | 2026-09-25 02:00:00+0200 | 2026-09-26 02:00:00+0200 | True         
+energy_meter_compressed | _hyper_5_315_chunk | 2026-09-26 02:00:00+0200 | 2026-09-27 02:00:00+0200 | True         
+energy_meter_compressed | _hyper_5_316_chunk | 2026-09-27 02:00:00+0200 | 2026-09-28 02:00:00+0200 | True         
+energy_meter_compressed | _hyper_5_317_chunk | 2026-09-28 02:00:00+0200 | 2026-09-29 02:00:00+0200 | True         
+energy_time_compressed  | _hyper_4_260_chunk | 2026-08-31 02:00:00+0200 | 2026-09-01 02:00:00+0200 | True         
+energy_time_compressed  | _hyper_4_261_chunk | 2026-09-01 02:00:00+0200 | 2026-09-02 02:00:00+0200 | True         
+energy_time_compressed  | _hyper_4_262_chunk | 2026-09-02 02:00:00+0200 | 2026-09-03 02:00:00+0200 | True         
+energy_time_compressed  | _hyper_4_263_chunk | 2026-09-03 02:00:00+0200 | 2026-09-04 02:00:00+0200 | True         
+energy_time_compressed  | _hyper_4_264_chunk | 2026-09-04 02:00:00+0200 | 2026-09-05 02:00:00+0200 | True         
+energy_time_compressed  | _hyper_4_265_chunk | 2026-09-05 02:00:00+0200 | 2026-09-06 02:00:00+0200 | True         
+energy_time_compressed  | _hyper_4_266_chunk | 2026-09-06 02:00:00+0200 | 2026-09-07 02:00:00+0200 | True         
+energy_time_compressed  | _hyper_4_267_chunk | 2026-09-07 02:00:00+0200 | 2026-09-08 02:00:00+0200 | True         
+energy_time_compressed  | _hyper_4_268_chunk | 2026-09-08 02:00:00+0200 | 2026-09-09 02:00:00+0200 | True         
+energy_time_compressed  | _hyper_4_269_chunk | 2026-09-09 02:00:00+0200 | 2026-09-10 02:00:00+0200 | True         
+energy_time_compressed  | _hyper_4_270_chunk | 2026-09-10 02:00:00+0200 | 2026-09-11 02:00:00+0200 | True         
+energy_time_compressed  | _hyper_4_271_chunk | 2026-09-11 02:00:00+0200 | 2026-09-12 02:00:00+0200 | True         
+energy_time_compressed  | _hyper_4_272_chunk | 2026-09-12 02:00:00+0200 | 2026-09-13 02:00:00+0200 | True         
+energy_time_compressed  | _hyper_4_273_chunk | 2026-09-13 02:00:00+0200 | 2026-09-14 02:00:00+0200 | True         
+energy_time_compressed  | _hyper_4_274_chunk | 2026-09-14 02:00:00+0200 | 2026-09-15 02:00:00+0200 | True         
+energy_time_compressed  | _hyper_4_275_chunk | 2026-09-15 02:00:00+0200 | 2026-09-16 02:00:00+0200 | True         
+energy_time_compressed  | _hyper_4_276_chunk | 2026-09-16 02:00:00+0200 | 2026-09-17 02:00:00+0200 | True         
+energy_time_compressed  | _hyper_4_277_chunk | 2026-09-17 02:00:00+0200 | 2026-09-18 02:00:00+0200 | True         
+energy_time_compressed  | _hyper_4_278_chunk | 2026-09-18 02:00:00+0200 | 2026-09-19 02:00:00+0200 | True         
+energy_time_compressed  | _hyper_4_279_chunk | 2026-09-19 02:00:00+0200 | 2026-09-20 02:00:00+0200 | True         
+energy_time_compressed  | _hyper_4_280_chunk | 2026-09-20 02:00:00+0200 | 2026-09-21 02:00:00+0200 | True         
+energy_time_compressed  | _hyper_4_281_chunk | 2026-09-21 02:00:00+0200 | 2026-09-22 02:00:00+0200 | True         
+energy_time_compressed  | _hyper_4_282_chunk | 2026-09-22 02:00:00+0200 | 2026-09-23 02:00:00+0200 | True         
+energy_time_compressed  | _hyper_4_283_chunk | 2026-09-23 02:00:00+0200 | 2026-09-24 02:00:00+0200 | True         
+energy_time_compressed  | _hyper_4_284_chunk | 2026-09-24 02:00:00+0200 | 2026-09-25 02:00:00+0200 | True         
+energy_time_compressed  | _hyper_4_285_chunk | 2026-09-25 02:00:00+0200 | 2026-09-26 02:00:00+0200 | True         
+energy_time_compressed  | _hyper_4_286_chunk | 2026-09-26 02:00:00+0200 | 2026-09-27 02:00:00+0200 | True         
+energy_time_compressed  | _hyper_4_287_chunk | 2026-09-27 02:00:00+0200 | 2026-09-28 02:00:00+0200 | True         
+energy_time_compressed  | _hyper_4_288_chunk | 2026-09-28 02:00:00+0200 | 2026-09-29 02:00:00+0200 | True         
+(58 rows)
+Time: 7.4 ms
+
+--- Ranges compressed in one table but not the other (must be 0 rows) ---
+-- Both tables must have the SAME time ranges compressed. Any row returned here
+-- is a range that is compressed in one table but not in the other.
+SELECT coalesce(t.range_start, m.range_start) AS range_start,
+       t.is_compressed AS time_table_compressed,
+       m.is_compressed AS meter_table_compressed
+FROM (SELECT range_start, is_compressed FROM timescaledb_information.chunks
+      WHERE hypertable_name = 'energy_time_compressed') t
+FULL JOIN (SELECT range_start, is_compressed FROM timescaledb_information.chunks
+           WHERE hypertable_name = 'energy_meter_compressed') m USING (range_start)
+WHERE t.is_compressed IS DISTINCT FROM m.is_compressed
+
+range_start | time_table_compressed | meter_table_compressed
+------------+-----------------------+-----------------------
+(0 rows)
+Time: 53.6 ms
+
+--- Data check: energy_readings ---
+-- The six values that must match across tables.
+SELECT count(*)                 AS row_count,
+       count(DISTINCT meter_id) AS distinct_meters,
+       min(event_time)          AS earliest_event_time,
+       max(event_time)          AS latest_event_time,
+       sum(power_kw)            AS sum_power_kw,
+       sum(energy_kwh)          AS sum_energy_kwh
+FROM energy_readings
+
+row_count  | distinct_meters | earliest_event_time      | latest_event_time        | sum_power_kw      | sum_energy_kwh  
+-----------+-----------------+--------------------------+--------------------------+-------------------+-----------------
+10,643,735 | 4,000           | 2026-09-01 00:00:00+0200 | 2026-09-28 23:45:00+0200 | 15,414,817.387793 | 3,853,704.346815
+(1 row)
+Time: 34,615.0 ms
+
+--- Data check: energy_time_compressed ---
+-- The six values that must match across tables.
+SELECT count(*)                 AS row_count,
+       count(DISTINCT meter_id) AS distinct_meters,
+       min(event_time)          AS earliest_event_time,
+       max(event_time)          AS latest_event_time,
+       sum(power_kw)            AS sum_power_kw,
+       sum(energy_kwh)          AS sum_energy_kwh
+FROM energy_time_compressed
+
+row_count  | distinct_meters | earliest_event_time      | latest_event_time        | sum_power_kw      | sum_energy_kwh  
+-----------+-----------------+--------------------------+--------------------------+-------------------+-----------------
+10,643,735 | 4,000           | 2026-09-01 00:00:00+0200 | 2026-09-28 23:45:00+0200 | 15,414,817.387793 | 3,853,704.346815
+(1 row)
+Time: 6,971.4 ms
+
+--- Data check: energy_meter_compressed ---
+-- The six values that must match across tables.
+SELECT count(*)                 AS row_count,
+       count(DISTINCT meter_id) AS distinct_meters,
+       min(event_time)          AS earliest_event_time,
+       max(event_time)          AS latest_event_time,
+       sum(power_kw)            AS sum_power_kw,
+       sum(energy_kwh)          AS sum_energy_kwh
+FROM energy_meter_compressed
+
+row_count  | distinct_meters | earliest_event_time      | latest_event_time        | sum_power_kw      | sum_energy_kwh  
+-----------+-----------------+--------------------------+--------------------------+-------------------+-----------------
+10,643,735 | 4,000           | 2026-09-01 00:00:00+0200 | 2026-09-28 23:45:00+0200 | 15,414,817.387793 | 3,853,704.346815
+(1 row)
+Time: 2,709.8 ms
+
+--- Matching data checks (baseline and both compressed tables) ---
+table                   | rows       | meters | earliest                 | latest                   | sum power_kw    | sum energy_kwh | status
+------------------------+------------+--------+--------------------------+--------------------------+-----------------+----------------+-------
+energy_readings         | 10,643,735 | 4,000  | 2026-09-01 00:00:00+0200 | 2026-09-28 23:45:00+0200 | 15414817.387793 | 3853704.346815 | MATCH 
+energy_time_compressed  | 10,643,735 | 4,000  | 2026-09-01 00:00:00+0200 | 2026-09-28 23:45:00+0200 | 15414817.387793 | 3853704.346815 | MATCH 
+energy_meter_compressed | 10,643,735 | 4,000  | 2026-09-01 00:00:00+0200 | 2026-09-28 23:45:00+0200 | 15414817.387793 | 3853704.346815 | MATCH 
+(3 rows)
+
+RESULT: both compressed tables match the baseline and each other
+------------------------------------------------------------------------------
+4_1_load_and_compress   finished 2026-10-13 12:53:06.452 CAT   (output saved in results/4_1_load_and_compress.log)

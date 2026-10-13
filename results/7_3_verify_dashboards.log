@@ -1,0 +1,103 @@
+==============================================================================
+7_3_verify_dashboards   started 2026-10-13 14:08:02.592 CAT   machine Muhirwa
+==============================================================================
+Filters: 2026-09-22 00:00 CAT (inclusive) to 2026-09-29 00:00 CAT (exclusive), all regions, meter 1000000000
+
+--- Panel 1 Hourly regional energy | Raw | first rows of 1680 ---
+bucket                   | region   | energy_kwh | reading_count
+-------------------------+----------+------------+--------------
+2026-09-22 00:00:00+0200 | Region 1 | 435.589852 | 1,580        
+2026-09-22 00:00:00+0200 | Region 2 | 438.336326 | 1,588        
+2026-09-22 00:00:00+0200 | Region 3 | 474.889055 | 1,586        
+2026-09-22 00:00:00+0200 | Region 4 | 362.411735 | 1,588        
+(4 rows)
+
+--- Panel 1 Hourly regional energy | Aggregate | first rows of 1680 ---
+bucket                   | region   | energy_kwh | reading_count
+-------------------------+----------+------------+--------------
+2026-09-22 00:00:00+0200 | Region 1 | 435.589852 | 1,580        
+2026-09-22 00:00:00+0200 | Region 2 | 438.336326 | 1,588        
+2026-09-22 00:00:00+0200 | Region 3 | 474.889055 | 1,586        
+2026-09-22 00:00:00+0200 | Region 4 | 362.411735 | 1,588        
+(4 rows)
+
+--- Panel 2 Daily network energy | Raw | first rows of 7 ---
+bucket                   | energy_kwh     | reading_count
+-------------------------+----------------+--------------
+2026-09-22 00:00:00+0200 | 150,056.527916 | 380,170      
+2026-09-23 00:00:00+0200 | 150,430.650123 | 380,117      
+2026-09-24 00:00:00+0200 | 150,800.610218 | 380,160      
+2026-09-25 00:00:00+0200 | 151,190.779137 | 380,185      
+(4 rows)
+
+--- Panel 2 Daily network energy | Aggregate | first rows of 7 ---
+bucket                   | energy_kwh     | reading_count
+-------------------------+----------------+--------------
+2026-09-22 00:00:00+0200 | 150,056.527916 | 380,170      
+2026-09-23 00:00:00+0200 | 150,430.650123 | 380,117      
+2026-09-24 00:00:00+0200 | 150,800.610218 | 380,160      
+2026-09-25 00:00:00+0200 | 151,190.779137 | 380,185      
+(4 rows)
+
+--- Panel 3 Network energy per seven-day period | Raw | first rows of 1 ---
+bucket                   | energy_kwh    | reading_count
+-------------------------+---------------+--------------
+2026-09-22 00:00:00+0200 | 992,560.28775 | 2,660,983    
+(1 row)
+
+--- Panel 3 Network energy per seven-day period | Aggregate | first rows of 1 ---
+bucket                   | energy_kwh    | reading_count
+-------------------------+---------------+--------------
+2026-09-22 00:00:00+0200 | 992,560.28775 | 2,660,983    
+(1 row)
+
+--- Panel 4 Daily energy of the selected meter | Raw | first rows of 7 ---
+bucket                   | meter_id   | energy_kwh | reading_count
+-------------------------+------------+------------+--------------
+2026-09-22 00:00:00+0200 | 1000000000 | 9.156665   | 94           
+2026-09-23 00:00:00+0200 | 1000000000 | 8.967244   | 93           
+2026-09-24 00:00:00+0200 | 1000000000 | 9.409393   | 95           
+2026-09-25 00:00:00+0200 | 1000000000 | 9.368742   | 95           
+(4 rows)
+
+--- Panel 4 Daily energy of the selected meter | Aggregate | first rows of 7 ---
+bucket                   | meter_id   | energy_kwh | reading_count
+-------------------------+------------+------------+--------------
+2026-09-22 00:00:00+0200 | 1000000000 | 9.156665   | 94           
+2026-09-23 00:00:00+0200 | 1000000000 | 8.967244   | 93           
+2026-09-24 00:00:00+0200 | 1000000000 | 9.409393   | 95           
+2026-09-25 00:00:00+0200 | 1000000000 | 9.368742   | 95           
+(4 rows)
+
+--- Panel 5 Completeness by region | Raw | first rows of 10 ---
+region   | meter_count | reading_count | planned_readings | completeness_percent
+---------+-------------+---------------+------------------+---------------------
+Region 1 | 400         | 266,147       | 268,800          | 99.013021           
+Region 2 | 400         | 266,082       | 268,800          | 98.988839           
+Region 3 | 400         | 266,075       | 268,800          | 98.986235           
+Region 4 | 400         | 266,194       | 268,800          | 99.030506           
+(4 rows)
+
+--- Panel 5 Completeness by region | Aggregate | first rows of 10 ---
+region   | meter_count | reading_count | planned_readings | completeness_percent
+---------+-------------+---------------+------------------+---------------------
+Region 1 | 400         | 266,147       | 268,800          | 99.013021           
+Region 2 | 400         | 266,082       | 268,800          | 98.988839           
+Region 3 | 400         | 266,075       | 268,800          | 98.986235           
+Region 4 | 400         | 266,194       | 268,800          | 99.030506           
+(4 rows)
+
+--- Numerical check of all five panels ---
+panel                                 | matched by        | raw rows | aggregate rows | compared rows | keys      | reading-count mismatches | max abs difference | allowed | result
+--------------------------------------+-------------------+----------+----------------+---------------+-----------+--------------------------+--------------------+---------+-------
+1 Hourly regional energy              | bucket + region   | 1,680    | 1,680          | 1,680         | identical | 0                        | 0.000000000 kWh    | 0.001   | PASS  
+2 Daily network energy                | bucket            | 7        | 7              | 7             | identical | 0                        | 0.000000005 kWh    | 0.001   | PASS  
+3 Network energy per seven-day period | bucket            | 1        | 1              | 1             | identical | 0                        | 0.000000011 kWh    | 0.001   | PASS  
+4 Daily energy of the selected meter  | bucket + meter_id | 7        | 7              | 7             | identical | 0                        | 0.000000000 kWh    | 0.001   | PASS  
+5 Completeness by region              | region            | 10       | 10             | 10            | identical | 0                        | 0.000000000 pp     | 1e-06   | PASS  
+(5 rows)
+
+Panel data exported to results/7_3_panel<N>_raw.csv and results/7_3_panel<N>_aggregate.csv
+RESULT: both dashboards return matching data - safe to time them
+------------------------------------------------------------------------------
+7_3_verify_dashboards   finished 2026-10-13 14:08:05.846 CAT   (output saved in results/7_3_verify_dashboards.log)

@@ -1,0 +1,12 @@
+{
+  "route": "CSV + COPY",
+  "consumed": 10696848,
+  "csv_rows": 10696848,
+  "committed": 10696848,
+  "expected_emitted": 10696848,
+  "generation_seconds": 75.15122130000964,
+  "load_seconds": 151.21134610002628,
+  "total_seconds": 227.97406410000985,
+  "started": "2026-10-13 11:16:21.274 CAT",
+  "final_commit": "2026-10-13 11:20:09.231 CAT"
+}

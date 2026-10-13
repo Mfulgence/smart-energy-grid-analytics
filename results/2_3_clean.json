@@ -1,0 +1,15 @@
+{
+  "before": {
+    "row_count": 10696848,
+    "distinct_pairs": 10643735,
+    "total_energy_kwh": 3872863.893179256
+  },
+  "after": {
+    "row_count": 10643735,
+    "distinct_pairs": 10643735,
+    "total_energy_kwh": 3853704.3468159125
+  },
+  "deleted": 53113,
+  "extra_copy_energy_kwh": 19159.54636324993,
+  "duplicate_pairs_remaining": 0
+}

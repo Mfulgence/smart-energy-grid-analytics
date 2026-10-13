@@ -1,0 +1,167 @@
+{
+  "label": "3_2",
+  "client": "Python 3.12.6 + psycopg 3.3.6 (s32_benchmark.py)",
+  "timer": "time.perf_counter() around execute()+fetchall()",
+  "machine": "Muhirwa",
+  "cache": "warm",
+  "tables": [
+    "energy_readings_3h",
+    "energy_readings",
+    "energy_readings_week"
+  ],
+  "reference": "energy_readings_3h",
+  "runs": 5,
+  "session_start": "2026-10-13 12:08:18.733 CAT",
+  "session_end": "2026-10-13 12:09:13.447 CAT",
+  "session_seconds": 54.71696079999674,
+  "summary": [
+    {
+      "query": "Q1",
+      "table": "energy_readings_3h",
+      "median_ms": 156.3078000326641,
+      "min_ms": 152.9725000145845,
+      "max_ms": 163.11209998093545,
+      "rows": 24
+    },
+    {
+      "query": "Q1",
+      "table": "energy_readings",
+      "median_ms": 174.32309995638207,
+      "min_ms": 158.28169998712838,
+      "max_ms": 231.73949995543808,
+      "rows": 24
+    },
+    {
+      "query": "Q1",
+      "table": "energy_readings_week",
+      "median_ms": 163.79980003694072,
+      "min_ms": 160.5375000508502,
+      "max_ms": 178.90900000929832,
+      "rows": 24
+    },
+    {
+      "query": "Q2",
+      "table": "energy_readings_3h",
+      "median_ms": 222.72700001485646,
+      "min_ms": 214.05040001263842,
+      "max_ms": 224.8875999939628,
+      "rows": 10
+    },
+    {
+      "query": "Q2",
+      "table": "energy_readings",
+      "median_ms": 218.69429998332635,
+      "min_ms": 210.91480000177398,
+      "max_ms": 243.36869997205213,
+      "rows": 10
+    },
+    {
+      "query": "Q2",
+      "table": "energy_readings_week",
+      "median_ms": 272.84480002708733,
+      "min_ms": 257.8160999692045,
+      "max_ms": 286.4388999878429,
+      "rows": 10
+    },
+    {
+      "query": "Q3",
+      "table": "energy_readings_3h",
+      "median_ms": 3520.0908999540843,
+      "min_ms": 2952.695600048173,
+      "max_ms": 3589.966400002595,
+      "rows": 4000
+    },
+    {
+      "query": "Q3",
+      "table": "energy_readings",
+      "median_ms": 1002.3624000023119,
+      "min_ms": 989.9965000222437,
+      "max_ms": 1064.8155999951996,
+      "rows": 4000
+    },
+    {
+      "query": "Q3",
+      "table": "energy_readings_week",
+      "median_ms": 913.7088999850675,
+      "min_ms": 867.502200009767,
+      "max_ms": 1007.8575999941677,
+      "rows": 4000
+    },
+    {
+      "query": "Q4",
+      "table": "energy_readings_3h",
+      "median_ms": 6.882400019094348,
+      "min_ms": 5.244500003755093,
+      "max_ms": 7.339500007219613,
+      "rows": 1
+    },
+    {
+      "query": "Q4",
+      "table": "energy_readings",
+      "median_ms": 2.7175999712198973,
+      "min_ms": 1.820300007238984,
+      "max_ms": 2.9927000286988914,
+      "rows": 1
+    },
+    {
+      "query": "Q4",
+      "table": "energy_readings_week",
+      "median_ms": 1.8168999813497066,
+      "min_ms": 1.7626999760977924,
+      "max_ms": 2.325100009329617,
+      "rows": 1
+    },
+    {
+      "query": "Q5",
+      "table": "energy_readings_3h",
+      "median_ms": 981.7755999974906,
+      "min_ms": 901.0635000304319,
+      "max_ms": 1010.872200015001,
+      "rows": 1
+    },
+    {
+      "query": "Q5",
+      "table": "energy_readings",
+      "median_ms": 803.2346999971196,
+      "min_ms": 796.6580999782309,
+      "max_ms": 821.693999983836,
+      "rows": 1
+    },
+    {
+      "query": "Q5",
+      "table": "energy_readings_week",
+      "median_ms": 797.7962999721058,
+      "min_ms": 759.8977999878116,
+      "max_ms": 825.4440000164323,
+      "rows": 1
+    }
+  ],
+  "chunks_touched": {
+    "Q1": {
+      "energy_readings_3h": 9,
+      "energy_readings": 2,
+      "energy_readings_week": 1
+    },
+    "Q2": {
+      "energy_readings_3h": 57,
+      "energy_readings": 8,
+      "energy_readings_week": 2
+    },
+    "Q3": {
+      "energy_readings_3h": 225,
+      "energy_readings": 29,
+      "energy_readings_week": 5
+    },
+    "Q4": {
+      "energy_readings_3h": 57,
+      "energy_readings": 8,
+      "energy_readings_week": 2
+    },
+    "Q5": {
+      "energy_readings_3h": 225,
+      "energy_readings": 29,
+      "energy_readings_week": 5
+    }
+  },
+  "all_results_match": true
+}

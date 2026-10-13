@@ -1,0 +1,15 @@
+==============================================================================
+1_3_publisher   started 2026-10-13 10:58:13.500 CAT   machine Muhirwa
+==============================================================================
+Connected to broker at localhost:1883
+  taken 500   acknowledged 303
+  taken 1,000   acknowledged 805
+  taken 1,500   acknowledged 1,302
+  taken 2,000   acknowledged 1,811
+
+Dictionaries taken from generator : 2,000
+Messages acknowledged by broker   : 2,000
+Messages not acknowledged         : 0
+Elapsed                           : 0.35 s
+------------------------------------------------------------------------------
+1_3_publisher   finished 2026-10-13 10:58:16.983 CAT   (output saved in results/1_3_publisher.log)

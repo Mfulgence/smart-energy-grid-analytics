@@ -1,0 +1,32 @@
+[
+  {
+    "view": "agg_region_15min",
+    "rows_before": 0,
+    "rows": 26880,
+    "refresh_seconds": 29.188766600040253,
+    "data_bytes": 2211840,
+    "index_bytes": 2138112,
+    "total_bytes": 4349952,
+    "refreshed_at": "2026-10-13 13:51:51.749 CAT"
+  },
+  {
+    "view": "agg_region_hourly",
+    "rows_before": 0,
+    "rows": 6720,
+    "refresh_seconds": 38.10852680000244,
+    "data_bytes": 671744,
+    "index_bytes": 622592,
+    "total_bytes": 1294336,
+    "refreshed_at": "2026-10-13 13:52:21.014 CAT"
+  },
+  {
+    "view": "agg_meter_daily",
+    "rows_before": 0,
+    "rows": 112000,
+    "refresh_seconds": 27.351840500021353,
+    "data_bytes": 7766016,
+    "index_bytes": 5398528,
+    "total_bytes": 13164544,
+    "refreshed_at": "2026-10-13 13:52:59.200 CAT"
+  }
+]

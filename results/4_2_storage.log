@@ -1,0 +1,89 @@
+==============================================================================
+4_2_storage   started 2026-10-13 12:58:58.385 CAT   machine Muhirwa
+==============================================================================
+Baseline (uncompressed, same chunk interval): energy_readings  (1 day, 0:00:00)
+Cutoff used in 4.1: 2026-10-11 12:47:36.955 CAT
+
+--- Size of energy_readings ---
+SELECT %(table)s::text                                       AS hypertable,
+       table_bytes + coalesce(toast_bytes, 0)                AS data_bytes,
+       index_bytes,
+       total_bytes
+FROM hypertable_detailed_size(%(table)s::regclass)
+
+hypertable      | data_bytes  | index_bytes | total_bytes
+----------------+-------------+-------------+------------
+energy_readings | 997,072,896 | 488,497,152 | 1485570048 
+(1 row)
+Time: 155.2 ms
+
+--- Size of energy_time_compressed ---
+SELECT %(table)s::text                                       AS hypertable,
+       table_bytes + coalesce(toast_bytes, 0)                AS data_bytes,
+       index_bytes,
+       total_bytes
+FROM hypertable_detailed_size(%(table)s::regclass)
+
+hypertable             | data_bytes  | index_bytes | total_bytes
+-----------------------+-------------+-------------+------------
+energy_time_compressed | 459,071,488 | 966,656     | 460,038,144
+(1 row)
+Time: 955.4 ms
+
+--- Size of energy_meter_compressed ---
+SELECT %(table)s::text                                       AS hypertable,
+       table_bytes + coalesce(toast_bytes, 0)                AS data_bytes,
+       index_bytes,
+       total_bytes
+FROM hypertable_detailed_size(%(table)s::regclass)
+
+hypertable              | data_bytes  | index_bytes | total_bytes
+------------------------+-------------+-------------+------------
+energy_meter_compressed | 520,298,496 | 5,718,016   | 526,016,512
+(1 row)
+Time: 816.3 ms
+
+--- TimescaleDB compression statistics: energy_time_compressed ---
+SELECT 'energy_time_compressed' AS hypertable,
+       total_chunks,
+       number_compressed_chunks                            AS compressed_chunks,
+       pg_size_pretty(before_compression_total_bytes)      AS before_compression,
+       pg_size_pretty(after_compression_total_bytes)       AS after_compression
+FROM hypertable_compression_stats('energy_time_compressed')
+
+hypertable             | total_chunks | compressed_chunks | before_compression | after_compression
+-----------------------+--------------+-------------------+--------------------+------------------
+energy_time_compressed | 29           | 29                | 1411 MB            | 438 MB           
+(1 row)
+Time: 54.5 ms
+
+--- TimescaleDB compression statistics: energy_meter_compressed ---
+SELECT 'energy_meter_compressed' AS hypertable,
+       total_chunks,
+       number_compressed_chunks                            AS compressed_chunks,
+       pg_size_pretty(before_compression_total_bytes)      AS before_compression,
+       pg_size_pretty(after_compression_total_bytes)       AS after_compression
+FROM hypertable_compression_stats('energy_meter_compressed')
+
+hypertable              | total_chunks | compressed_chunks | before_compression | after_compression
+------------------------+--------------+-------------------+--------------------+------------------
+energy_meter_compressed | 29           | 29                | 1411 MB            | 507 MB           
+(1 row)
+Time: 2.0 ms
+
+--- Final sizes in MB (all chunks and their indexes) ---
+table                   | data MB | index MB | total MB
+------------------------+---------+----------+---------
+energy_readings         | 950.9   | 465.9    | 1,416.8 
+energy_time_compressed  | 437.8   | 0.9      | 438.7   
+energy_meter_compressed | 496.2   | 5.5      | 501.6   
+(3 rows)
+
+--- Compression result (baseline energy_readings: 1,416.8 MB total) ---
+strategy                | compression ratio | saved % | compression s (sum of chunks) | load s (excluded) | compressed chunks | rows in compressed chunks | rows %
+------------------------+-------------------+---------+-------------------------------+-------------------+-------------------+---------------------------+-------
+energy_time_compressed  | 3.23 : 1          | 69.0    | 18.5                          | 97.6              | 29 of 29          | 10,643,735 of 10,643,735  | 100.00
+energy_meter_compressed | 2.82 : 1          | 64.6    | 40.3                          | 126.6             | 29 of 29          | 10,643,735 of 10,643,735  | 100.00
+(2 rows)
+------------------------------------------------------------------------------
+4_2_storage   finished 2026-10-13 12:59:00.569 CAT   (output saved in results/4_2_storage.log)

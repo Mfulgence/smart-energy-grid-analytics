@@ -1,0 +1,120 @@
+==============================================================================
+3_1_verify_chunks   started 2026-10-13 12:02:58.527 CAT   machine Muhirwa
+==============================================================================
+
+--- Chunk interval of each hypertable ---
+-- The configured chunk interval of every hypertable under comparison.
+SELECT hypertable_name,
+       column_name          AS partition_column,
+       time_interval::text  AS chunk_interval
+FROM timescaledb_information.dimensions
+WHERE hypertable_name = ANY(%(tables)s)
+ORDER BY time_interval
+
+hypertable_name      | partition_column | chunk_interval
+---------------------+------------------+---------------
+energy_readings_3h   | event_time       | 03:00:00      
+energy_readings      | event_time       | 1 day         
+energy_readings_week | event_time       | 7 days        
+(3 rows)
+Time: 10.9 ms
+
+--- Chunk count and time range ---
+-- How many chunks each table actually has and the time range they span.
+-- Chunk boundaries are aligned to UTC, i.e. 02:00 CAT. That is why the
+-- one-day table has 29 chunks for 28 CAT days: the first and last CAT day
+-- each fall partly into an extra chunk.
+SELECT hypertable_name,
+       count(*)          AS chunk_count,
+       min(range_start)  AS first_chunk_start,
+       max(range_end)    AS last_chunk_end
+FROM timescaledb_information.chunks
+WHERE hypertable_name = ANY(%(tables)s)
+GROUP BY hypertable_name
+ORDER BY chunk_count DESC
+
+hypertable_name      | chunk_count | first_chunk_start        | last_chunk_end          
+---------------------+-------------+--------------------------+-------------------------
+energy_readings_3h   | 225         | 2026-08-31 23:00:00+0200 | 2026-09-29 02:00:00+0200
+energy_readings      | 29          | 2026-08-31 02:00:00+0200 | 2026-09-29 02:00:00+0200
+energy_readings_week | 5           | 2026-08-27 02:00:00+0200 | 2026-10-01 02:00:00+0200
+(3 rows)
+Time: 23.8 ms
+
+--- Indexes (must match on every table) ---
+-- Index definitions: must be the same two b-tree indexes on every table.
+SELECT tablename, indexname, indexdef
+FROM pg_indexes
+WHERE schemaname = 'public' AND tablename = ANY(%(tables)s)
+ORDER BY tablename, indexname
+
+tablename            | indexname                           | indexdef                                                                                                               
+---------------------+-------------------------------------+------------------------------------------------------------------------------------------------------------------------
+energy_readings      | energy_readings_meter_time_idx      | CREATE INDEX energy_readings_meter_time_idx ON public.energy_readings USING btree (meter_id, event_time DESC)          
+energy_readings      | energy_readings_time_idx            | CREATE INDEX energy_readings_time_idx ON public.energy_readings USING btree (event_time DESC)                          
+energy_readings_3h   | energy_readings_3h_meter_time_idx   | CREATE INDEX energy_readings_3h_meter_time_idx ON public.energy_readings_3h USING btree (meter_id, event_time DESC)    
+energy_readings_3h   | energy_readings_3h_time_idx         | CREATE INDEX energy_readings_3h_time_idx ON public.energy_readings_3h USING btree (event_time DESC)                    
+energy_readings_week | energy_readings_week_meter_time_idx | CREATE INDEX energy_readings_week_meter_time_idx ON public.energy_readings_week USING btree (meter_id, event_time DESC)
+energy_readings_week | energy_readings_week_time_idx       | CREATE INDEX energy_readings_week_time_idx ON public.energy_readings_week USING btree (event_time DESC)                
+(6 rows)
+Time: 4.3 ms
+
+--- Data check: energy_readings_3h ---
+-- The six values that must match across tables.
+SELECT count(*)                 AS row_count,
+       count(DISTINCT meter_id) AS distinct_meters,
+       min(event_time)          AS earliest_event_time,
+       max(event_time)          AS latest_event_time,
+       sum(power_kw)            AS sum_power_kw,
+       sum(energy_kwh)          AS sum_energy_kwh
+FROM energy_readings_3h
+
+row_count  | distinct_meters | earliest_event_time      | latest_event_time        | sum_power_kw      | sum_energy_kwh  
+-----------+-----------------+--------------------------+--------------------------+-------------------+-----------------
+10,643,735 | 4,000           | 2026-09-01 00:00:00+0200 | 2026-09-28 23:45:00+0200 | 15,414,817.387793 | 3,853,704.346815
+(1 row)
+Time: 15,301.2 ms
+
+--- Data check: energy_readings ---
+-- The six values that must match across tables.
+SELECT count(*)                 AS row_count,
+       count(DISTINCT meter_id) AS distinct_meters,
+       min(event_time)          AS earliest_event_time,
+       max(event_time)          AS latest_event_time,
+       sum(power_kw)            AS sum_power_kw,
+       sum(energy_kwh)          AS sum_energy_kwh
+FROM energy_readings
+
+row_count  | distinct_meters | earliest_event_time      | latest_event_time        | sum_power_kw      | sum_energy_kwh  
+-----------+-----------------+--------------------------+--------------------------+-------------------+-----------------
+10,643,735 | 4,000           | 2026-09-01 00:00:00+0200 | 2026-09-28 23:45:00+0200 | 15,414,817.387793 | 3,853,704.346815
+(1 row)
+Time: 13,804.5 ms
+
+--- Data check: energy_readings_week ---
+-- The six values that must match across tables.
+SELECT count(*)                 AS row_count,
+       count(DISTINCT meter_id) AS distinct_meters,
+       min(event_time)          AS earliest_event_time,
+       max(event_time)          AS latest_event_time,
+       sum(power_kw)            AS sum_power_kw,
+       sum(energy_kwh)          AS sum_energy_kwh
+FROM energy_readings_week
+
+row_count  | distinct_meters | earliest_event_time      | latest_event_time        | sum_power_kw      | sum_energy_kwh  
+-----------+-----------------+--------------------------+--------------------------+-------------------+-----------------
+10,643,735 | 4,000           | 2026-09-01 00:00:00+0200 | 2026-09-28 23:45:00+0200 | 15,414,817.387793 | 3,853,704.346815
+(1 row)
+Time: 14,079.2 ms
+
+--- Matching data check (required: 10,643,735 rows, 4,000 meters, identical dates, sums within 0.001) ---
+table                | rows       | meters | earliest event_time      | latest event_time        | sum power_kw    | sum energy_kwh | power diff  | energy diff | status
+---------------------+------------+--------+--------------------------+--------------------------+-----------------+----------------+-------------+-------------+-------
+energy_readings_3h   | 10,643,735 | 4,000  | 2026-09-01 00:00:00+0200 | 2026-09-28 23:45:00+0200 | 15414817.387793 | 3853704.346815 | 0.000000000 | 0.000000000 | MATCH 
+energy_readings      | 10,643,735 | 4,000  | 2026-09-01 00:00:00+0200 | 2026-09-28 23:45:00+0200 | 15414817.387793 | 3853704.346815 | 0.000000004 | 0.000000001 | MATCH 
+energy_readings_week | 10,643,735 | 4,000  | 2026-09-01 00:00:00+0200 | 2026-09-28 23:45:00+0200 | 15414817.387793 | 3853704.346815 | 0.000000006 | 0.000000000 | MATCH 
+(3 rows)
+
+RESULT: all tables hold the same cleaned data
+------------------------------------------------------------------------------
+3_1_verify_chunks   finished 2026-10-13 12:03:41.929 CAT   (output saved in results/3_1_verify_chunks.log)

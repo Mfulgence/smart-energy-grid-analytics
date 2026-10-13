@@ -1,0 +1,121 @@
+{
+  "label": "4_3",
+  "client": "Python 3.12.6 + psycopg 3.3.6 (s32_benchmark.py)",
+  "timer": "time.perf_counter() around execute()+fetchall()",
+  "machine": "Muhirwa",
+  "cache": "warm",
+  "tables": [
+    "energy_time_compressed",
+    "energy_meter_compressed"
+  ],
+  "reference": "energy_readings",
+  "runs": 5,
+  "session_start": "2026-10-13 13:03:37.263 CAT",
+  "session_end": "2026-10-13 13:03:52.118 CAT",
+  "session_seconds": 14.853594899992459,
+  "summary": [
+    {
+      "query": "Q1",
+      "table": "energy_time_compressed",
+      "median_ms": 420.3350000316277,
+      "min_ms": 415.3617999982089,
+      "max_ms": 434.5164999831468,
+      "rows": 24
+    },
+    {
+      "query": "Q1",
+      "table": "energy_meter_compressed",
+      "median_ms": 568.9501999877393,
+      "min_ms": 514.6565000177361,
+      "max_ms": 782.4253000435419,
+      "rows": 24
+    },
+    {
+      "query": "Q2",
+      "table": "energy_time_compressed",
+      "median_ms": 167.9885999765247,
+      "min_ms": 158.00289995968342,
+      "max_ms": 171.91540001658723,
+      "rows": 10
+    },
+    {
+      "query": "Q2",
+      "table": "energy_meter_compressed",
+      "median_ms": 158.20649999659508,
+      "min_ms": 143.73060001526028,
+      "max_ms": 166.21219995431602,
+      "rows": 10
+    },
+    {
+      "query": "Q3",
+      "table": "energy_time_compressed",
+      "median_ms": 250.6246999837458,
+      "min_ms": 240.50929996883497,
+      "max_ms": 251.2976000434719,
+      "rows": 4000
+    },
+    {
+      "query": "Q3",
+      "table": "energy_meter_compressed",
+      "median_ms": 246.27890001283959,
+      "min_ms": 239.64139999588951,
+      "max_ms": 248.74259997159243,
+      "rows": 4000
+    },
+    {
+      "query": "Q4",
+      "table": "energy_time_compressed",
+      "median_ms": 86.03090001270175,
+      "min_ms": 82.45359995635226,
+      "max_ms": 188.00120003288612,
+      "rows": 1
+    },
+    {
+      "query": "Q4",
+      "table": "energy_meter_compressed",
+      "median_ms": 2.065200009383261,
+      "min_ms": 1.5480000292882323,
+      "max_ms": 2.156499947886914,
+      "rows": 1
+    },
+    {
+      "query": "Q5",
+      "table": "energy_time_compressed",
+      "median_ms": 190.69370004581288,
+      "min_ms": 186.67720002122223,
+      "max_ms": 204.52240004669875,
+      "rows": 1
+    },
+    {
+      "query": "Q5",
+      "table": "energy_meter_compressed",
+      "median_ms": 329.8326000222005,
+      "min_ms": 323.93459999002516,
+      "max_ms": 337.89409999735653,
+      "rows": 1
+    }
+  ],
+  "chunks_touched": {
+    "Q1": {
+      "energy_time_compressed": 2,
+      "energy_meter_compressed": 2
+    },
+    "Q2": {
+      "energy_time_compressed": 8,
+      "energy_meter_compressed": 8
+    },
+    "Q3": {
+      "energy_time_compressed": 29,
+      "energy_meter_compressed": 29
+    },
+    "Q4": {
+      "energy_time_compressed": 8,
+      "energy_meter_compressed": 8
+    },
+    "Q5": {
+      "energy_time_compressed": 29,
+      "energy_meter_compressed": 29
+    }
+  },
+  "all_results_match": true
+}

@@ -1,0 +1,14 @@
+# Secrets: real passwords stay on your machine only
+.env
+
+# The generated dataset is kept local (README explains how to regenerate it)
+data/
+
+# Fault logs of the MQTT programs and Python caches
+logs/
+__pycache__/
+*.pyc
+
+# Virtual environment
+.venv/
+venv/

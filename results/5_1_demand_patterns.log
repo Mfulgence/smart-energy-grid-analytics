@@ -1,0 +1,149 @@
+==============================================================================
+5_1_demand_patterns   started 2026-10-13 13:45:21.764 CAT   machine Muhirwa
+==============================================================================
+
+--- Total network energy per CAT day (kWh) ---
+-- 5.1  Total network energy per CAT day (28 rows).
+SELECT time_bucket('1 day', event_time, 'Africa/Kigali')      AS cat_day,
+       to_char(time_bucket('1 day', event_time, 'Africa/Kigali'), 'Dy') AS weekday,
+       sum(energy_kwh)                                         AS energy_kwh,
+       count(*)                                                AS readings
+FROM energy_readings
+GROUP BY cat_day
+ORDER BY cat_day
+
+cat_day                  | weekday | energy_kwh     | readings
+-------------------------+---------+----------------+---------
+2026-09-01 00:00:00+0200 | Tue     | 141,195.236949 | 380,120 
+2026-09-02 00:00:00+0200 | Wed     | 141,533.89845  | 380,100 
+2026-09-03 00:00:00+0200 | Thu     | 141,938.491454 | 380,136 
+2026-09-04 00:00:00+0200 | Fri     | 142,301.475853 | 380,055 
+2026-09-05 00:00:00+0200 | Sat     | 111,680.476864 | 380,083 
+2026-09-06 00:00:00+0200 | Sun     | 111,950.736316 | 380,172 
+2026-09-07 00:00:00+0200 | Mon     | 143,598.744748 | 380,102 
+2026-09-08 00:00:00+0200 | Tue     | 144,126.9995   | 380,119 
+2026-09-09 00:00:00+0200 | Wed     | 144,519.795898 | 380,138 
+2026-09-10 00:00:00+0200 | Thu     | 144,818.079367 | 380,175 
+2026-09-11 00:00:00+0200 | Fri     | 145,348.886228 | 380,090 
+2026-09-12 00:00:00+0200 | Sat     | 114,025.490417 | 380,190 
+2026-09-13 00:00:00+0200 | Sun     | 114,264.085809 | 380,138 
+2026-09-14 00:00:00+0200 | Mon     | 146,611.63479  | 380,134 
+2026-09-15 00:00:00+0200 | Tue     | 147,144.618355 | 380,081 
+2026-09-16 00:00:00+0200 | Wed     | 147,508.121008 | 380,174 
+2026-09-17 00:00:00+0200 | Thu     | 147,968.920001 | 380,196 
+2026-09-18 00:00:00+0200 | Fri     | 148,320.196632 | 380,077 
+2026-09-19 00:00:00+0200 | Sat     | 116,242.445617 | 380,212 
+2026-09-20 00:00:00+0200 | Sun     | 116,493.001954 | 380,224 
+2026-09-21 00:00:00+0200 | Mon     | 149,552.722854 | 380,036 
+2026-09-22 00:00:00+0200 | Tue     | 150,056.527916 | 380,170 
+2026-09-23 00:00:00+0200 | Wed     | 150,430.650123 | 380,117 
+2026-09-24 00:00:00+0200 | Thu     | 150,800.610218 | 380,160 
+2026-09-25 00:00:00+0200 | Fri     | 151,190.779137 | 380,185 
+2026-09-26 00:00:00+0200 | Sat     | 118,623.963322 | 380,086 
+2026-09-27 00:00:00+0200 | Sun     | 118,993.599747 | 380,203 
+2026-09-28 00:00:00+0200 | Mon     | 152,464.157286 | 380,062 
+(28 rows)
+Time: 2,939.8 ms
+
+--- Energy in the four seven-day periods (kWh) ---
+-- 5.1  Totals for the four seven-day periods beginning 1, 8, 15 and 22 September.
+-- The fourth argument is the origin: buckets are counted from 1 September
+-- 00:00 CAT instead of from a calendar Monday.
+SELECT time_bucket('7 days', event_time, 'Africa/Kigali',
+                   TIMESTAMPTZ '2026-09-01 00:00:00+02')        AS period_start,
+       sum(energy_kwh)                                          AS energy_kwh,
+       count(*)                                                 AS readings
+FROM energy_readings
+GROUP BY period_start
+ORDER BY period_start
+
+period_start             | energy_kwh     | readings 
+-------------------------+----------------+----------
+2026-09-01 00:00:00+0200 | 934,199.060635 | 2,660,768
+2026-09-08 00:00:00+0200 | 953,714.97201  | 2,660,984
+2026-09-15 00:00:00+0200 | 973,230.026421 | 2,661,000
+2026-09-22 00:00:00+0200 | 992,560.28775  | 2,660,983
+(4 rows)
+Time: 4,359.5 ms
+
+--- Three highest 15-minute network demand intervals (kW) ---
+-- 5.1  The three highest 15-minute network DEMAND intervals of the 28 days.
+-- Demand = power summed across all meters at the same event_time (kW).
+SELECT event_time,
+       to_char(event_time, 'Dy')  AS weekday,
+       sum(power_kw)              AS network_demand_kw,
+       count(*)                   AS meters_reporting
+FROM energy_readings
+GROUP BY event_time
+ORDER BY network_demand_kw DESC, event_time
+LIMIT 3
+
+event_time               | weekday | network_demand_kw | meters_reporting
+-------------------------+---------+-------------------+-----------------
+2026-09-28 13:00:00+0200 | Mon     | 7,993.691474      | 3,965           
+2026-09-28 12:45:00+0200 | Mon     | 7,943.946545      | 3,969           
+2026-09-28 13:15:00+0200 | Mon     | 7,943.635736      | 3,952           
+(3 rows)
+Time: 868.0 ms
+
+--- Average network demand by hour of day (kW) ---
+-- 5.1  Average network demand by hour of day, working days versus weekend.
+-- Used to explain WHEN the peaks happen.
+SELECT hour_of_day,
+       avg(demand_kw) FILTER (WHERE NOT weekend) AS weekday_avg_kw,
+       avg(demand_kw) FILTER (WHERE weekend)     AS weekend_avg_kw
+FROM (
+    SELECT extract(hour FROM event_time AT TIME ZONE 'Africa/Kigali')::int        AS hour_of_day,
+           extract(isodow FROM event_time AT TIME ZONE 'Africa/Kigali') >= 6      AS weekend,
+           sum(power_kw)                                                          AS demand_kw
+    FROM energy_readings
+    GROUP BY event_time
+) per_interval
+GROUP BY hour_of_day
+ORDER BY hour_of_day
+
+hour_of_day | weekday_avg_kw | weekend_avg_kw
+------------+----------------+---------------
+0           | 4,404.535434   | 3,546.786165  
+1           | 4,408.197383   | 3,544.601854  
+2           | 4,422.723385   | 3,558.493775  
+3           | 4,478.946493   | 3,615.873689  
+4           | 4,695.134871   | 3,811.816044  
+5           | 5,155.329315   | 4,243.00957   
+6           | 5,836.55745    | 4,862.219335  
+7           | 6,419.474295   | 5,321.799932  
+8           | 6,651.871756   | 5,360.628281  
+9           | 6,698.147209   | 5,155.315304  
+10          | 6,893.732344   | 5,058.608842  
+11          | 7,253.856924   | 5,161.148906  
+12          | 7,556.698198   | 5,301.890685  
+13          | 7,617.897078   | 5,346.169754  
+14          | 7,439.670531   | 5,294.918123  
+15          | 7,169.555115   | 5,275.691334  
+16          | 7,035.225746   | 5,421.140999  
+17          | 7,071.915979   | 5,721.414323  
+18          | 7,104.420153   | 5,963.184594  
+19          | 6,855.351261   | 5,856.473172  
+20          | 6,267.786967   | 5,350.540803  
+21          | 5,549.976628   | 4,669.783913  
+22          | 4,965.739846   | 4,086.82853   
+23          | 4,618.782985   | 3,755.887076  
+(24 rows)
+Time: 822.5 ms
+Chart saved: results/5_1_daily_energy.png
+Chart saved: results/5_1_weekly_energy.png
+Chart saved: results/5_1_load_profile.png
+
+--- Key figures for the written explanation ---
+Fact                                    | Value                           
+----------------------------------------+---------------------------------
+Total energy, 28 days (kWh)             | 3,853,704.3                     
+Average working-day energy (kWh)        | 146,571.5                       
+Average weekend-day energy (kWh)        | 115,284.2                       
+Weekend vs working day                  | -21.3 %                         
+Growth, period 4 vs period 1            | +6.25 %                         
+Highest demand interval                 | 2026-09-28 13:00 CAT, 7,993.7 kW
+Energy in that 15-minute interval (kWh) | 1,998.4  (= kW x 0.25 h)        
+(7 rows)
+------------------------------------------------------------------------------
+5_1_demand_patterns   finished 2026-10-13 13:45:31.384 CAT   (output saved in results/5_1_demand_patterns.log)

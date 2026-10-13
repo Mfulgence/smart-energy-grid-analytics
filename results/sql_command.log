@@ -1,0 +1,15 @@
+==============================================================================
+sql_command   started 2026-10-13 10:27:35.914 CAT   machine Muhirwa
+==============================================================================
+Connected to database 'postgres' as 'postgres' on localhost:5432
+
+[1/1]
+SELECT version()
+
+version                                                                
+-----------------------------------------------------------------------
+PostgreSQL 18.6 on x86_64-windows, compiled by msvc-19.44.35228, 64-bit
+(1 row)
+Time: 3.0 ms
+------------------------------------------------------------------------------
+sql_command   finished 2026-10-13 10:27:35.975 CAT   (output saved in results/sql_command.log)

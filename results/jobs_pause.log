@@ -1,0 +1,36 @@
+==============================================================================
+jobs_pause   started 2026-10-13 14:12:41.340 CAT   machine Muhirwa
+==============================================================================
+SELECT alter_job(1000, scheduled => false);   -- policy_compression on energy_time_compressed
+SELECT alter_job(1001, scheduled => false);   -- policy_compression on energy_meter_compressed
+SELECT alter_job(1002, scheduled => false);   -- policy_refresh_continuous_aggregate on agg_region_15min
+SELECT alter_job(1003, scheduled => false);   -- policy_refresh_continuous_aggregate on agg_region_hourly
+SELECT alter_job(1004, scheduled => false);   -- policy_refresh_continuous_aggregate on agg_meter_daily
+
+5 job(s) paused.
+
+--- Background job status (enabled = scheduled) ---
+SELECT j.job_id,
+       j.proc_name                AS policy,
+       j.hypertable_name          AS on_table,
+       j.schedule_interval::text  AS runs_every,
+       j.scheduled                AS enabled,
+       j.config::text             AS settings,
+       s.last_run_status,
+       s.total_runs
+FROM timescaledb_information.jobs j
+LEFT JOIN timescaledb_information.job_stats s USING (job_id)
+WHERE j.job_id >= 1000
+ORDER BY j.job_id
+
+job_id | policy                              | on_table                | runs_every | enabled | settings                                                                     | last_run_status | total_runs
+-------+-------------------------------------+-------------------------+------------+---------+------------------------------------------------------------------------------+-----------------+-----------
+1,000  | policy_compression                  | energy_time_compressed  | 12:00:00   | False   | {"hypertable_id": 4, "compress_after": "48:00:00"}                           | Success         | 1         
+1,001  | policy_compression                  | energy_meter_compressed | 12:00:00   | False   | {"hypertable_id": 5, "compress_after": "48:00:00"}                           | Success         | 1         
+1,002  | policy_refresh_continuous_aggregate | agg_region_15min        | 00:15:00   | False   | {"end_offset": "01:00:00", "start_offset": "3 days", "mat_hypertable_id": 6} | Success         | 2         
+1,003  | policy_refresh_continuous_aggregate | agg_region_hourly       | 00:15:00   | False   | {"end_offset": "01:00:00", "start_offset": "3 days", "mat_hypertable_id": 7} | Success         | 2         
+1,004  | policy_refresh_continuous_aggregate | agg_meter_daily         | 00:15:00   | False   | {"end_offset": "01:00:00", "start_offset": "3 days", "mat_hypertable_id": 8} | Success         | 2         
+(5 rows)
+Time: 5.7 ms
+------------------------------------------------------------------------------
+jobs_pause   finished 2026-10-13 14:12:41.404 CAT   (output saved in results/jobs_pause.log)

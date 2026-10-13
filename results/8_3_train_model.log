@@ -1,0 +1,44 @@
+==============================================================================
+8_3_train_model   started 2026-10-13 14:42:43.407 CAT   machine Muhirwa
+==============================================================================
+Model               : Ridge regression (scikit-learn)
+Shared predictors   : lag_24h, lag_48h, lag_168h, prev_day_mean, hour_of_day, day_of_week, region
+Training rows       : 1,680  (2026-09-08 00:00:00 to 2026-09-14 23:00:00)
+Validation rows     : 1,680  (2026-09-15 00:00:00 to 2026-09-21 23:00:00)
+Test rows           : 1,680  (2026-09-22 00:00:00 to 2026-09-28 23:00:00)
+Training completed  : R1 Ridge(alpha=0.1) in 0.065 s at 2026-10-13 14:42:43.515 CAT
+Training completed  : R2 Ridge(alpha=1.0) in 0.011 s at 2026-10-13 14:42:43.531 CAT
+Training completed  : R3 Ridge(alpha=10.0) in 0.011 s at 2026-10-13 14:42:43.546 CAT
+Training completed  : R4 Ridge(alpha=100.0) in 0.010 s at 2026-10-13 14:42:43.562 CAT
+
+--- Validation comparison ---
+configuration ID | model settings     | training rows | validation rows | validation MAE (kWh) | validation RMSE (kWh)
+-----------------+--------------------+---------------+-----------------+----------------------+----------------------
+R1               | Ridge(alpha=0.1)   | 1,680         | 1,680           | 4.4316               | 5.6433               
+R2               | Ridge(alpha=1.0)   | 1,680         | 1,680           | 4.4399               | 5.6517               
+R3               | Ridge(alpha=10.0)  | 1,680         | 1,680           | 4.8189               | 6.1843               
+R4               | Ridge(alpha=100.0) | 1,680         | 1,680           | 7.9553               | 11.7728              
+(4 rows)
+
+Selected configuration: R1 Ridge(alpha=0.1) (lowest validation MAE 4.4316 kWh)
+Frozen model + preprocessing saved to results/8_3_frozen_model.joblib at 2026-10-13 14:42:43.562 CAT
+It is used as saved from here on: no refit on validation or test data.
+
+Test predictions produced: 1,680 (10 regions x 7 days x 24 hours)
+
+--- Sample test predictions ---
+region   | target_hour         | forecast_origin | energy_kwh | model_kwh
+---------+---------------------+-----------------+------------+----------
+Region 1 | 2026-09-22 00:00:00 | 2026-09-22      | 435.59     | 439.328  
+Region 1 | 2026-09-22 01:00:00 | 2026-09-22      | 438.892    | 439.374  
+Region 1 | 2026-09-22 02:00:00 | 2026-09-22      | 437.375    | 442.261  
+Region 1 | 2026-09-22 03:00:00 | 2026-09-22      | 447.844    | 439.471  
+Region 1 | 2026-09-22 04:00:00 | 2026-09-22      | 463.197    | 467.382  
+Region 1 | 2026-09-22 05:00:00 | 2026-09-22      | 509.527    | 511.737  
+Region 1 | 2026-09-22 06:00:00 | 2026-09-22      | 586.375    | 584.869  
+Region 1 | 2026-09-22 07:00:00 | 2026-09-22      | 645.064    | 653.321  
+(8 rows)
+
+Predictions saved: results/8_3_model_predictions.csv
+------------------------------------------------------------------------------
+8_3_train_model   finished 2026-10-13 14:42:43.602 CAT   (output saved in results/8_3_train_model.log)

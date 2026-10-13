@@ -1,0 +1,254 @@
+==============================================================================
+5_4_anomalies   started 2026-10-13 13:39:13.308 CAT   machine Muhirwa
+==============================================================================
+RULE: flag a reading when power_kw >= 2.0 x typical or <= 0.5 x typical,
+      where typical = median power of the same meter, same 15-minute slot, same day type.
+
+
+--- Step 1: typical power per meter, slot and day type ---
+-- 5.4  Step 1 of the anomaly rule: learn what is NORMAL for each meter.
+-- For every meter, every 15-minute time-of-day slot and each day type
+-- (working day / weekend) take the MEDIAN power over the 28 days.
+-- The median is used instead of the mean because a few abnormal readings
+-- cannot move it, so the baseline itself is not polluted by anomalies.
+CREATE TEMP TABLE expected_profile AS
+SELECT meter_id,
+       (event_time AT TIME ZONE 'Africa/Kigali')::time                      AS slot,
+       extract(isodow FROM event_time AT TIME ZONE 'Africa/Kigali') >= 6    AS weekend,
+       percentile_cont(0.5) WITHIN GROUP (ORDER BY power_kw)                AS typical_kw,
+       count(*)                                                             AS samples
+FROM energy_readings
+GROUP BY 1, 2, 3
+
+SELECT 768000
+Time: 31,103.4 ms
+
+--- Step 2: spread of actual/typical for ALL readings ---
+-- 5.4  Step 2: how far do readings normally sit from their own typical value?
+-- ratio = actual power / typical power for that meter, slot and day type.
+-- The percentiles show the spread of normal behaviour and justify thresholds.
+SELECT count(*)                                                    AS readings,
+       percentile_cont(0.0001) WITHIN GROUP (ORDER BY ratio)       AS p0_01,
+       percentile_cont(0.001)  WITHIN GROUP (ORDER BY ratio)       AS p0_1,
+       percentile_cont(0.01)   WITHIN GROUP (ORDER BY ratio)       AS p1,
+       percentile_cont(0.5)    WITHIN GROUP (ORDER BY ratio)       AS median,
+       percentile_cont(0.99)   WITHIN GROUP (ORDER BY ratio)       AS p99,
+       percentile_cont(0.999)  WITHIN GROUP (ORDER BY ratio)       AS p99_9,
+       percentile_cont(0.9999) WITHIN GROUP (ORDER BY ratio)       AS p99_99
+FROM (
+    SELECT r.power_kw / p.typical_kw AS ratio
+    FROM energy_readings r
+    JOIN expected_profile p
+      ON p.meter_id = r.meter_id
+     AND p.slot     = (r.event_time AT TIME ZONE 'Africa/Kigali')::time
+     AND p.weekend  = (extract(isodow FROM r.event_time AT TIME ZONE 'Africa/Kigali') >= 6)
+    WHERE p.typical_kw > 0
+) ratios
+
+readings   | p0_01    | p0_1     | p1       | median | p99      | p99_9    | p99_99  
+-----------+----------+----------+----------+--------+----------+----------+---------
+10,643,735 | 0.764869 | 0.789198 | 0.822058 | 1      | 1.198943 | 1.250271 | 1.294348
+(1 row)
+Time: 28,550.9 ms
+
+--- Step 3: apply the rule and store the flags in anomaly_flags ---
+-- 5.4  Step 3: apply the rule. A reading is flagged when its power is at
+-- least HIGH times, or at most LOW times, the typical value for that meter,
+-- time slot and day type. 2.0 and 0.5 are filled in by s54_anomalies.py.
+-- Every flag identifies one meter_id and one event_time.
+CREATE TABLE anomaly_flags AS
+SELECT r.meter_id,
+       r.event_time,
+       r.power_kw,
+       p.typical_kw,
+       r.power_kw / p.typical_kw                                       AS ratio,
+       CASE WHEN r.power_kw >= 2.0 * p.typical_kw THEN 'demand_spike'
+            ELSE 'unusual_drop' END                                    AS flag_type
+FROM energy_readings r
+JOIN expected_profile p
+  ON p.meter_id = r.meter_id
+ AND p.slot     = (r.event_time AT TIME ZONE 'Africa/Kigali')::time
+ AND p.weekend  = (extract(isodow FROM r.event_time AT TIME ZONE 'Africa/Kigali') >= 6)
+WHERE p.typical_kw > 0
+  AND (r.power_kw >= 2.0 * p.typical_kw OR r.power_kw <= 0.5 * p.typical_kw)
+
+SELECT 474
+Time: 23,296.5 ms
+
+--- Flags by type ---
+SELECT flag_type,
+       count(*)                  AS flagged_readings,
+       count(DISTINCT meter_id)  AS meters,
+       min(ratio)                AS min_ratio,
+       max(ratio)                AS max_ratio
+FROM anomaly_flags
+GROUP BY flag_type
+ORDER BY flag_type
+
+flag_type    | flagged_readings | meters | min_ratio | max_ratio
+-------------+------------------+--------+-----------+----------
+demand_spike | 236              | 20     | 2.266322  | 3.355232 
+unusual_drop | 238              | 20     | 0.024195  | 0.038411 
+(2 rows)
+Time: 3.1 ms
+
+--- Sample flagged readings (meter_id + event_time) ---
+SELECT meter_id, event_time, power_kw, typical_kw, ratio, flag_type
+FROM anomaly_flags
+ORDER BY event_time, meter_id
+LIMIT 15
+
+meter_id   | event_time               | power_kw  | typical_kw | ratio    | flag_type   
+-----------+--------------------------+-----------+------------+----------+-------------
+1000001393 | 2026-09-01 09:00:00+0200 | 1.93489   | 0.628381   | 3.079167 | demand_spike
+1000001393 | 2026-09-01 09:15:00+0200 | 1.508951  | 0.557241   | 2.707897 | demand_spike
+1000001393 | 2026-09-01 09:30:00+0200 | 1.400602  | 0.52005    | 2.693209 | demand_spike
+1000001393 | 2026-09-01 09:45:00+0200 | 1.134787  | 0.462377   | 2.454246 | demand_spike
+1000001393 | 2026-09-01 10:00:00+0200 | 1.248324  | 0.403561   | 3.093272 | demand_spike
+1000001393 | 2026-09-01 10:15:00+0200 | 0.889945  | 0.348659   | 2.55248  | demand_spike
+1000001393 | 2026-09-01 10:30:00+0200 | 1.01272   | 0.336337   | 3.011028 | demand_spike
+1000001393 | 2026-09-01 10:45:00+0200 | 0.803771  | 0.293351   | 2.739963 | demand_spike
+1000001393 | 2026-09-01 11:00:00+0200 | 0.810595  | 0.281248   | 2.882136 | demand_spike
+1000003392 | 2026-09-01 11:00:00+0200 | 19.972568 | 7.082248   | 2.820089 | demand_spike
+1000001393 | 2026-09-01 11:15:00+0200 | 0.718677  | 0.265099   | 2.710971 | demand_spike
+1000001393 | 2026-09-01 11:30:00+0200 | 0.682739  | 0.246996   | 2.764176 | demand_spike
+1000003392 | 2026-09-01 11:30:00+0200 | 16.523476 | 7.034316   | 2.348981 | demand_spike
+1000001393 | 2026-09-01 11:45:00+0200 | 0.589915  | 0.240702   | 2.450816 | demand_spike
+1000003392 | 2026-09-01 11:45:00+0200 | 18.699739 | 6.87877    | 2.718471 | demand_spike
+(15 rows)
+Time: 6.4 ms
+
+--- Flags grouped per meter ---
+-- Flags grouped into one line per meter: first flag, last flag, how many.
+SELECT meter_id, flag_type, min(event_time) AS first_flag, max(event_time) AS last_flag,
+       count(*) AS flagged_readings
+FROM anomaly_flags
+GROUP BY meter_id, flag_type
+ORDER BY first_flag, meter_id
+
+meter_id   | flag_type    | first_flag               | last_flag                | flagged_readings
+-----------+--------------+--------------------------+--------------------------+-----------------
+1000001393 | demand_spike | 2026-09-01 09:00:00+0200 | 2026-09-01 11:45:00+0200 | 12              
+1000003392 | demand_spike | 2026-09-01 11:00:00+0200 | 2026-09-01 13:45:00+0200 | 11              
+1000003052 | demand_spike | 2026-09-01 17:00:00+0200 | 2026-09-01 19:45:00+0200 | 12              
+1000003519 | unusual_drop | 2026-09-02 11:00:00+0200 | 2026-09-02 13:45:00+0200 | 12              
+1000000513 | demand_spike | 2026-09-03 15:00:00+0200 | 2026-09-03 17:45:00+0200 | 12              
+1000000643 | demand_spike | 2026-09-04 17:00:00+0200 | 2026-09-04 19:45:00+0200 | 12              
+1000000856 | unusual_drop | 2026-09-04 17:00:00+0200 | 2026-09-04 19:45:00+0200 | 12              
+1000003684 | unusual_drop | 2026-09-05 11:00:00+0200 | 2026-09-05 13:45:00+0200 | 12              
+1000001799 | unusual_drop | 2026-09-06 10:00:00+0200 | 2026-09-06 12:45:00+0200 | 12              
+1000000244 | demand_spike | 2026-09-07 12:00:00+0200 | 2026-09-07 14:45:00+0200 | 12              
+1000001041 | demand_spike | 2026-09-10 13:00:00+0200 | 2026-09-10 15:45:00+0200 | 11              
+1000000945 | unusual_drop | 2026-09-10 14:00:00+0200 | 2026-09-10 16:45:00+0200 | 12              
+1000001660 | unusual_drop | 2026-09-10 15:00:00+0200 | 2026-09-10 17:45:00+0200 | 12              
+1000001570 | unusual_drop | 2026-09-11 11:00:00+0200 | 2026-09-11 13:45:00+0200 | 12              
+1000003027 | unusual_drop | 2026-09-11 18:00:00+0200 | 2026-09-11 20:45:00+0200 | 12              
+1000001172 | demand_spike | 2026-09-12 16:00:00+0200 | 2026-09-12 18:45:00+0200 | 12              
+1000003128 | demand_spike | 2026-09-13 07:00:00+0200 | 2026-09-13 09:45:00+0200 | 12              
+1000002602 | demand_spike | 2026-09-14 09:00:00+0200 | 2026-09-14 11:45:00+0200 | 12              
+1000000676 | demand_spike | 2026-09-15 11:00:00+0200 | 2026-09-15 13:45:00+0200 | 12              
+1000001931 | demand_spike | 2026-09-15 16:00:00+0200 | 2026-09-15 18:45:00+0200 | 12              
+1000000563 | unusual_drop | 2026-09-16 14:00:00+0200 | 2026-09-16 16:45:00+0200 | 12              
+1000003791 | unusual_drop | 2026-09-16 15:00:00+0200 | 2026-09-16 17:45:00+0200 | 11              
+1000002485 | demand_spike | 2026-09-16 16:00:00+0200 | 2026-09-16 18:45:00+0200 | 12              
+1000002294 | demand_spike | 2026-09-16 18:00:00+0200 | 2026-09-16 20:45:00+0200 | 12              
+1000000333 | demand_spike | 2026-09-18 06:00:00+0200 | 2026-09-18 08:45:00+0200 | 12              
+1000000253 | demand_spike | 2026-09-18 07:00:00+0200 | 2026-09-18 09:45:00+0200 | 12              
+1000002262 | demand_spike | 2026-09-19 07:00:00+0200 | 2026-09-19 09:45:00+0200 | 12              
+1000003562 | unusual_drop | 2026-09-20 06:00:00+0200 | 2026-09-20 08:45:00+0200 | 12              
+1000001481 | unusual_drop | 2026-09-20 17:00:00+0200 | 2026-09-20 19:45:00+0200 | 12              
+1000003960 | unusual_drop | 2026-09-21 12:00:00+0200 | 2026-09-21 14:45:00+0200 | 12              
+1000000957 | unusual_drop | 2026-09-23 11:00:00+0200 | 2026-09-23 13:45:00+0200 | 12              
+1000003350 | demand_spike | 2026-09-23 16:00:00+0200 | 2026-09-23 18:45:00+0200 | 11              
+1000000749 | demand_spike | 2026-09-25 08:00:00+0200 | 2026-09-25 10:45:00+0200 | 12              
+1000001552 | unusual_drop | 2026-09-25 12:00:00+0200 | 2026-09-25 14:45:00+0200 | 12              
+1000002435 | unusual_drop | 2026-09-25 17:00:00+0200 | 2026-09-25 19:45:00+0200 | 12              
+1000003772 | unusual_drop | 2026-09-26 08:00:00+0200 | 2026-09-26 10:45:00+0200 | 12              
+1000000739 | unusual_drop | 2026-09-26 11:00:00+0200 | 2026-09-26 13:45:00+0200 | 12              
+1000001624 | demand_spike | 2026-09-26 11:00:00+0200 | 2026-09-26 13:45:00+0200 | 11              
+1000003229 | unusual_drop | 2026-09-28 08:00:00+0200 | 2026-09-28 10:45:00+0200 | 12              
+1000003842 | unusual_drop | 2026-09-28 12:00:00+0200 | 2026-09-28 14:45:00+0200 | 11              
+(40 rows)
+Time: 0.9 ms
+
+anomaly_events() returned 40 injected events (used for evaluation only).
+
+--- Comparison with the 40 injected events ---
+meter_id   | event_type   | start_time               | end_time                 | flags inside | result  
+-----------+--------------+--------------------------+--------------------------+--------------+---------
+1000000643 | demand_spike | 2026-09-04 17:00:00+0200 | 2026-09-04 20:00:00+0200 | 12           | DETECTED
+1000001481 | unusual_drop | 2026-09-20 17:00:00+0200 | 2026-09-20 20:00:00+0200 | 12           | DETECTED
+1000002602 | demand_spike | 2026-09-14 09:00:00+0200 | 2026-09-14 12:00:00+0200 | 12           | DETECTED
+1000002435 | unusual_drop | 2026-09-25 17:00:00+0200 | 2026-09-25 20:00:00+0200 | 12           | DETECTED
+1000003052 | demand_spike | 2026-09-01 17:00:00+0200 | 2026-09-01 20:00:00+0200 | 12           | DETECTED
+1000001799 | unusual_drop | 2026-09-06 10:00:00+0200 | 2026-09-06 13:00:00+0200 | 12           | DETECTED
+1000000333 | demand_spike | 2026-09-18 06:00:00+0200 | 2026-09-18 09:00:00+0200 | 12           | DETECTED
+1000000856 | unusual_drop | 2026-09-04 17:00:00+0200 | 2026-09-04 20:00:00+0200 | 12           | DETECTED
+1000000513 | demand_spike | 2026-09-03 15:00:00+0200 | 2026-09-03 18:00:00+0200 | 12           | DETECTED
+1000003684 | unusual_drop | 2026-09-05 11:00:00+0200 | 2026-09-05 14:00:00+0200 | 12           | DETECTED
+1000001041 | demand_spike | 2026-09-10 13:00:00+0200 | 2026-09-10 16:00:00+0200 | 11           | DETECTED
+1000000957 | unusual_drop | 2026-09-23 11:00:00+0200 | 2026-09-23 14:00:00+0200 | 12           | DETECTED
+1000000749 | demand_spike | 2026-09-25 08:00:00+0200 | 2026-09-25 11:00:00+0200 | 12           | DETECTED
+1000003229 | unusual_drop | 2026-09-28 08:00:00+0200 | 2026-09-28 11:00:00+0200 | 12           | DETECTED
+1000001393 | demand_spike | 2026-09-01 09:00:00+0200 | 2026-09-01 12:00:00+0200 | 12           | DETECTED
+1000003562 | unusual_drop | 2026-09-20 06:00:00+0200 | 2026-09-20 09:00:00+0200 | 12           | DETECTED
+1000002294 | demand_spike | 2026-09-16 18:00:00+0200 | 2026-09-16 21:00:00+0200 | 12           | DETECTED
+1000000945 | unusual_drop | 2026-09-10 14:00:00+0200 | 2026-09-10 17:00:00+0200 | 12           | DETECTED
+1000001172 | demand_spike | 2026-09-12 16:00:00+0200 | 2026-09-12 19:00:00+0200 | 12           | DETECTED
+1000000739 | unusual_drop | 2026-09-26 11:00:00+0200 | 2026-09-26 14:00:00+0200 | 12           | DETECTED
+1000000253 | demand_spike | 2026-09-18 07:00:00+0200 | 2026-09-18 10:00:00+0200 | 12           | DETECTED
+1000003842 | unusual_drop | 2026-09-28 12:00:00+0200 | 2026-09-28 15:00:00+0200 | 11           | DETECTED
+1000000244 | demand_spike | 2026-09-07 12:00:00+0200 | 2026-09-07 15:00:00+0200 | 12           | DETECTED
+1000003960 | unusual_drop | 2026-09-21 12:00:00+0200 | 2026-09-21 15:00:00+0200 | 12           | DETECTED
+1000001624 | demand_spike | 2026-09-26 11:00:00+0200 | 2026-09-26 14:00:00+0200 | 11           | DETECTED
+1000003519 | unusual_drop | 2026-09-02 11:00:00+0200 | 2026-09-02 14:00:00+0200 | 12           | DETECTED
+1000002485 | demand_spike | 2026-09-16 16:00:00+0200 | 2026-09-16 19:00:00+0200 | 12           | DETECTED
+1000001570 | unusual_drop | 2026-09-11 11:00:00+0200 | 2026-09-11 14:00:00+0200 | 12           | DETECTED
+1000001931 | demand_spike | 2026-09-15 16:00:00+0200 | 2026-09-15 19:00:00+0200 | 12           | DETECTED
+1000001552 | unusual_drop | 2026-09-25 12:00:00+0200 | 2026-09-25 15:00:00+0200 | 12           | DETECTED
+1000000676 | demand_spike | 2026-09-15 11:00:00+0200 | 2026-09-15 14:00:00+0200 | 12           | DETECTED
+1000003772 | unusual_drop | 2026-09-26 08:00:00+0200 | 2026-09-26 11:00:00+0200 | 12           | DETECTED
+1000002262 | demand_spike | 2026-09-19 07:00:00+0200 | 2026-09-19 10:00:00+0200 | 12           | DETECTED
+1000000563 | unusual_drop | 2026-09-16 14:00:00+0200 | 2026-09-16 17:00:00+0200 | 12           | DETECTED
+1000003392 | demand_spike | 2026-09-01 11:00:00+0200 | 2026-09-01 14:00:00+0200 | 11           | DETECTED
+1000003791 | unusual_drop | 2026-09-16 15:00:00+0200 | 2026-09-16 18:00:00+0200 | 11           | DETECTED
+1000003128 | demand_spike | 2026-09-13 07:00:00+0200 | 2026-09-13 10:00:00+0200 | 12           | DETECTED
+1000003027 | unusual_drop | 2026-09-11 18:00:00+0200 | 2026-09-11 21:00:00+0200 | 12           | DETECTED
+1000003350 | demand_spike | 2026-09-23 16:00:00+0200 | 2026-09-23 19:00:00+0200 | 11           | DETECTED
+1000001660 | unusual_drop | 2026-09-10 15:00:00+0200 | 2026-09-10 18:00:00+0200 | 12           | DETECTED
+(40 rows)
+
+--- Observed readings inside injected intervals ---
+-- Used only for EVALUATION: observed readings that fall inside an injected
+-- interval of their own meter (start inclusive, end exclusive).
+SELECT count(*) AS observed_readings_inside_injected_intervals
+FROM energy_readings r
+JOIN injected_events e
+  ON e.meter_id = r.meter_id
+ AND r.event_time >= e.start_time
+ AND r.event_time <  e.end_time
+
+observed_readings_inside_injected_intervals
+-------------------------------------------
+474                                        
+(1 row)
+Time: 69.2 ms
+
+--- Evaluation result ---
+Measure                                       | Value     
+----------------------------------------------+-----------
+Injected events                               | 40        
+Detected events                               | 40 of 40  
+Missed events                                 | 0 of 40   
+Flagged readings in total                     | 474       
+Flags inside injected intervals (true flags)  | 474       
+False flags (outside every injected interval) | 0         
+Observed readings outside injected intervals  | 10,643,261
+False flags as % of those readings            | 0.000000 %
+Meters with at least one false flag           | 0         
+Percentage of meters affected by false flags  | 0.000 %   
+(10 rows)
+Chart saved: results/5_4_example_demand_spike.png
+Chart saved: results/5_4_example_unusual_drop.png
+------------------------------------------------------------------------------
+5_4_anomalies   finished 2026-10-13 13:40:37.786 CAT   (output saved in results/5_4_anomalies.log)

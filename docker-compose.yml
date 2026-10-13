@@ -1,0 +1,27 @@
+# OPTIONAL. Only for machines that do not already have EMQX and TimescaleDB
+# installed. Starts both services with:   docker compose up -d
+# Stop them with:                         docker compose down
+# (Data is kept in the named volume "pgdata" between restarts.)
+#
+# If you use this file, record in the report that PostgreSQL runs in a
+# container, and state the CPU/RAM limits of Docker Desktop
+# (Settings > Resources), as 1.1 asks.
+services:
+  timescaledb:
+    image: timescale/timescaledb:latest-pg16
+    environment:
+      POSTGRES_PASSWORD: ${PGPASSWORD:-change-me}   # same value as PGPASSWORD in .env
+      TZ: Africa/Kigali
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  emqx:
+    image: emqx/emqx:5.8
+    ports:
+      - "1883:1883"      # MQTT
+      - "18083:18083"    # EMQX dashboard (default login admin / public)
+
+volumes:
+  pgdata:

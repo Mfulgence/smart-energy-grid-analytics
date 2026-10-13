@@ -1,0 +1,127 @@
+==============================================================================
+2_1_capture_and_load   started 2026-10-13 11:16:21.274 CAT   machine Muhirwa
+==============================================================================
+dataset_info():
+  period            2026-09-01T00:00:00+02:00  to  2026-09-29T00:00:00+02:00 (exclusive)
+  meters            4,000
+  planned_readings  10,752,000
+  emitted_readings          10,696,848
+  unique_readings           10,643,735
+  duplicate_readings            53,113
+  delayed_unique_readings      213,090
+  missing_readings             108,265
+
+PHASE A  generating energy_readings.csv   started 2026-10-13 11:16:21.274 CAT
+  generated      500,000 dictionaries      142,284 per second
+  generated    1,000,000 dictionaries      141,636 per second
+  generated    1,500,000 dictionaries      142,170 per second
+  generated    2,000,000 dictionaries      142,185 per second
+  generated    2,500,000 dictionaries      142,465 per second
+  generated    3,000,000 dictionaries      142,263 per second
+  generated    3,500,000 dictionaries      142,578 per second
+  generated    4,000,000 dictionaries      142,802 per second
+  generated    4,500,000 dictionaries      143,057 per second
+  generated    5,000,000 dictionaries      143,244 per second
+  generated    5,500,000 dictionaries      143,322 per second
+  generated    6,000,000 dictionaries      143,332 per second
+  generated    6,500,000 dictionaries      143,364 per second
+  generated    7,000,000 dictionaries      143,434 per second
+  generated    7,500,000 dictionaries      143,449 per second
+  generated    8,000,000 dictionaries      143,438 per second
+  generated    8,500,000 dictionaries      143,463 per second
+  generated    9,000,000 dictionaries      143,398 per second
+  generated    9,500,000 dictionaries      142,943 per second
+  generated   10,000,000 dictionaries      142,670 per second
+  generated   10,500,000 dictionaries      142,419 per second
+PHASE A  finished 2026-10-13 11:17:36.420 CAT: 10,696,848 dictionaries consumed in 75.2 s (1,108 MB)
+
+CSV data rows counted in the file: 10,696,848
+
+energy_readings emptied (TRUNCATE) before loading.
+PHASE B  loading with COPY   started 2026-10-13 11:17:38.025 CAT
+  committed      500,000 rows       92,585 per second
+  committed    1,000,000 rows       88,820 per second
+  committed    1,500,000 rows       86,226 per second
+  committed    2,000,000 rows       85,375 per second
+  committed    2,500,000 rows       84,927 per second
+  committed    3,000,000 rows       81,192 per second
+  committed    3,500,000 rows       77,030 per second
+  committed    4,000,000 rows       75,936 per second
+  committed    4,500,000 rows       74,782 per second
+  committed    5,000,000 rows       73,937 per second
+  committed    5,500,000 rows       74,250 per second
+  committed    6,000,000 rows       75,028 per second
+  committed    6,500,000 rows       75,044 per second
+  committed    7,000,000 rows       74,719 per second
+  committed    7,500,000 rows       75,197 per second
+  committed    8,000,000 rows       75,571 per second
+  committed    8,500,000 rows       74,121 per second
+  committed    9,000,000 rows       73,163 per second
+  committed    9,500,000 rows       72,378 per second
+  committed   10,000,000 rows       71,966 per second
+  committed   10,500,000 rows       71,419 per second
+  committed   10,696,848 rows       70,749 per second
+PHASE B  finished 2026-10-13 11:20:09.231 CAT: 10,696,848 rows committed in 151.2 s
+
+--- Count agreement (all must equal expected_counts.emitted_readings) ---
+Count                                      | Measured   | Expected   | Status
+-------------------------------------------+------------+------------+-------
+Dictionaries consumed from iter_readings() | 10,696,848 | 10,696,848 | OK    
+CSV data rows                              | 10,696,848 | 10,696,848 | OK    
+Rows committed in energy_readings          | 10,696,848 | 10,696,848 | OK    
+(3 rows)
+
+--- Timings ---
+Measure                                                     | Value                                             
+------------------------------------------------------------+---------------------------------------------------
+Ingestion route                                             | generator -> CSV file -> COPY into energy_readings
+File generation seconds                                     | 75.2                                              
+Database loading seconds (first COPY to final commit)       | 151.2                                             
+Total elapsed seconds (start of generation to final commit) | 228.0                                             
+Started (CAT)                                               | 2026-10-13 11:16:21.274 CAT                       
+Final commit (CAT)                                          | 2026-10-13 11:20:09.231 CAT                       
+(6 rows)
+
+--- Row count, distinct meters, first and last event_time ---
+SELECT count(*)                 AS row_count,
+       count(DISTINCT meter_id) AS distinct_meters,
+       min(event_time)          AS earliest_event_time,
+       max(event_time)          AS latest_event_time
+FROM energy_readings
+
+row_count  | distinct_meters | earliest_event_time      | latest_event_time       
+-----------+-----------------+--------------------------+-------------------------
+10,696,848 | 4,000           | 2026-09-01 00:00:00+0200 | 2026-09-28 23:45:00+0200
+(1 row)
+Time: 1,872.0 ms
+
+--- Size of energy_readings including all chunks ---
+SELECT pg_size_pretty(table_bytes)                 AS table_data,
+       pg_size_pretty(index_bytes)                 AS indexes,
+       pg_size_pretty(coalesce(toast_bytes, 0))    AS toast,
+       pg_size_pretty(total_bytes)                 AS combined_total,
+       round(table_bytes / 1024.0 / 1024.0, 1)     AS table_mb,
+       round(index_bytes / 1024.0 / 1024.0, 1)     AS index_mb,
+       round(total_bytes / 1024.0 / 1024.0, 1)     AS total_mb
+FROM hypertable_detailed_size('energy_readings')
+
+table_data | indexes | toast   | combined_total | table_mb | index_mb | total_mb
+-----------+---------+---------+----------------+----------+----------+---------
+958 MB     | 466 MB  | 0 bytes | 1423 MB        | 957.6    | 465.9    | 1423.5  
+(1 row)
+Time: 943.5 ms
+
+--- Chunks created by the load ---
+SELECT count(*) AS chunk_count, min(range_start) AS first_chunk_start, max(range_end) AS last_chunk_end
+FROM timescaledb_information.chunks
+WHERE hypertable_name = 'energy_readings'
+
+chunk_count | first_chunk_start        | last_chunk_end          
+------------+--------------------------+-------------------------
+29          | 2026-08-31 02:00:00+0200 | 2026-09-29 02:00:00+0200
+(1 row)
+Time: 14.3 ms
+
+RESULT: all three counts agree with emitted_readings - safe to continue to 2.2
+------------------------------------------------------------------------------
+2_1_capture_and_load   finished 2026-10-13 11:20:13.109 CAT   (output saved in results/2_1_capture_and_load.log)

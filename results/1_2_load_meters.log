@@ -1,0 +1,69 @@
+==============================================================================
+1_2_load_meters   started 2026-10-13 10:53:25.208 CAT   machine Muhirwa
+==============================================================================
+meter_metadata() returned 4,000 dictionaries
+First dictionary: {'meter_id': 1000000000, 'region': 'Region 1', 'customer_type': 'residential', 'base_power_kw': 0.695844, 'power_factor': 0.95}
+Inserted/updated 4,000 rows and committed.
+
+--- Row count must be 4,000 ---
+SELECT count(*) AS meter_rows FROM meters
+
+meter_rows
+----------
+4,000     
+(1 row)
+Time: 5.8 ms
+
+--- Meters per region (expect 400 each) ---
+SELECT region, count(*) AS meters
+FROM meters
+GROUP BY region
+ORDER BY length(region), region
+
+region    | meters
+----------+-------
+Region 1  | 400   
+Region 2  | 400   
+Region 3  | 400   
+Region 4  | 400   
+Region 5  | 400   
+Region 6  | 400   
+Region 7  | 400   
+Region 8  | 400   
+Region 9  | 400   
+Region 10 | 400   
+(10 rows)
+Time: 2.3 ms
+
+--- Meters per customer type ---
+SELECT customer_type, count(*) AS meters,
+       round(min(base_power_kw)::numeric, 3) AS min_base_kw,
+       round(max(base_power_kw)::numeric, 3) AS max_base_kw
+FROM meters
+GROUP BY customer_type
+ORDER BY customer_type
+
+customer_type | meters | min_base_kw | max_base_kw
+--------------+--------+-------------+------------
+commercial    | 1,010  | 1.508       | 4.999      
+industrial    | 406    | 5.023       | 14.999     
+residential   | 2,584  | 0.301       | 1.399      
+(3 rows)
+Time: 3.4 ms
+
+--- Sample rows ---
+SELECT * FROM meters ORDER BY meter_id LIMIT 5
+
+meter_id   | region   | customer_type | base_power_kw | power_factor
+-----------+----------+---------------+---------------+-------------
+1000000000 | Region 1 | residential   | 0.695844      | 0.95        
+1000000001 | Region 2 | residential   | 1.086415      | 0.95        
+1000000002 | Region 3 | residential   | 1.176455      | 0.95        
+1000000003 | Region 4 | residential   | 0.464924      | 0.95        
+1000000004 | Region 5 | commercial    | 1.772752      | 0.95        
+(5 rows)
+Time: 0.7 ms
+
+RESULT: meters contains 4,000 rows -> OK
+------------------------------------------------------------------------------
+1_2_load_meters   finished 2026-10-13 10:53:25.596 CAT   (output saved in results/1_2_load_meters.log)

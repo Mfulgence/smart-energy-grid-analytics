@@ -1,0 +1,83 @@
+==============================================================================
+8_1_prepare_features   started 2026-10-13 14:38:34.875 CAT   machine Muhirwa
+==============================================================================
+
+--- One row per region and CAT hour ---
+SELECT time_bucket(INTERVAL '1 hour', r.event_time, 'Africa/Kigali') AS target_hour,
+       m.region,
+       sum(r.energy_kwh) AS energy_kwh,
+       count(*)          AS reading_count
+FROM energy_readings r
+JOIN meters m ON m.meter_id = r.meter_id
+GROUP BY target_hour, m.region
+ORDER BY length(m.region), m.region, target_hour
+
+target_hour              | region   | energy_kwh | reading_count
+-------------------------+----------+------------+--------------
+2026-09-01 00:00:00+0200 | Region 1 | 412.560911 | 1,585        
+2026-09-01 01:00:00+0200 | Region 1 | 414.95578  | 1,591        
+2026-09-01 02:00:00+0200 | Region 1 | 419.519106 | 1,585        
+2026-09-01 03:00:00+0200 | Region 1 | 416.787964 | 1,578        
+2026-09-01 04:00:00+0200 | Region 1 | 443.142324 | 1,590        
+(5 rows)
+... 6715 more rows not shown
+Time: 4,572.1 ms
+
+--- Dataset check ---
+Check                                      | Value                           
+-------------------------------------------+---------------------------------
+Regions                                    | 10                              
+CAT hours in the period                    | 672                             
+Expected rows (regions x hours)            | 6,720                           
+Rows in the dataset                        | 6,720                           
+Absent region-hours                        | 0                               
+Readings per region-hour: full count       | 1,600 (400 meters x 4 intervals)
+Readings per region-hour: min / mean / max | 1,562 / 1,583.9 / 1,597         
+Total readings behind the dataset          | 10,643,735                      
+(8 rows)
+
+--- Features (shared by every model configuration) ---
+feature       | kind                                 | lag / window length (hours) | earliest usable target timestamp (CAT)
+--------------+--------------------------------------+-----------------------------+---------------------------------------
+lag_24h       | lag                                  | 24                          | 2026-09-02 00:00                      
+lag_48h       | lag                                  | 48                          | 2026-09-03 00:00                      
+lag_168h      | lag                                  | 168                         | 2026-09-08 00:00                      
+prev_day_mean | window: mean of the previous CAT day | 24                          | 2026-09-02 00:00                      
+hour_of_day   | calendar (0-23)                      | 0                           | 2026-09-01 00:00                      
+day_of_week   | calendar (Monday=0 ... Sunday=6)     | 0                           | 2026-09-01 00:00                      
+region        | identifier (one of 10)               | 0                           | 2026-09-01 00:00                      
+(7 rows)
+Initial lookback = 168 hours, so the earliest target with ALL features is 2026-09-08 00:00 CAT.
+
+--- Splits by target timestamp ---
+split      | rows before exclusions | excluded (no lookback) | rows retained | first retained target | last retained target | split dates             
+-----------+------------------------+------------------------+---------------+-----------------------+----------------------+-------------------------
+train      | 3,360                  | 1,680                  | 1,680         | 2026-09-08 00:00      | 2026-09-14 23:00     | 2026-09-01 to 2026-09-14
+validation | 1,680                  | 0                      | 1,680         | 2026-09-15 00:00      | 2026-09-21 23:00     | 2026-09-15 to 2026-09-21
+test       | 1,680                  | 0                      | 1,680         | 2026-09-22 00:00      | 2026-09-28 23:00     | 2026-09-22 to 2026-09-28
+(3 rows)
+The same retained training rows are used by every model configuration.
+
+--- Check: hours between the END of each lag source hour and the forecast origin (must be >= 0) ---
+feature       | rows checked | smallest gap h | largest gap h | violations | result                                         
+--------------+--------------+----------------+---------------+------------+------------------------------------------------
+lag_24h       | 5,040        | 0              | 23            | 0          | OK                                             
+lag_48h       | 5,040        | 24             | 47            | 0          | OK                                             
+lag_168h      | 5,040        | 144            | 167           | 0          | OK                                             
+prev_day_mean | 5,040        | 0              | 0             | 0          | OK (window = the 24 hours ending at the origin)
+(4 rows)
+
+--- Feature examples (Region 1, first test hours) ---
+region   | target_hour         | forecast_origin | energy_kwh | lag_24h | lag_24h_source      | lag_168h | lag_168h_source     | prev_day_mean | hour_of_day | day_of_week
+---------+---------------------+-----------------+------------+---------+---------------------+----------+---------------------+---------------+-------------+------------
+Region 1 | 2026-09-22 00:00:00 | 2026-09-22      | 435.59     | 441.869 | 2026-09-21 00:00:00 | 431.531  | 2026-09-15 00:00:00 | 622.388       | 0           | 1          
+Region 1 | 2026-09-22 01:00:00 | 2026-09-22      | 438.892    | 435.374 | 2026-09-21 01:00:00 | 430.239  | 2026-09-15 01:00:00 | 622.388       | 1           | 1          
+Region 1 | 2026-09-22 02:00:00 | 2026-09-22      | 437.375    | 432.51  | 2026-09-21 02:00:00 | 434.994  | 2026-09-15 02:00:00 | 622.388       | 2           | 1          
+Region 1 | 2026-09-22 03:00:00 | 2026-09-22      | 447.844    | 443.206 | 2026-09-21 03:00:00 | 430.493  | 2026-09-15 03:00:00 | 622.388       | 3           | 1          
+Region 1 | 2026-09-22 04:00:00 | 2026-09-22      | 463.197    | 468.38  | 2026-09-21 04:00:00 | 458.249  | 2026-09-15 04:00:00 | 622.388       | 4           | 1          
+Region 1 | 2026-09-22 05:00:00 | 2026-09-22      | 509.527    | 515.601 | 2026-09-21 05:00:00 | 501.804  | 2026-09-15 05:00:00 | 622.388       | 5           | 1          
+(6 rows)
+
+Dataset saved: results/8_1_hourly_dataset.csv (6,720 rows)
+------------------------------------------------------------------------------
+8_1_prepare_features   finished 2026-10-13 14:38:39.723 CAT   (output saved in results/8_1_prepare_features.log)

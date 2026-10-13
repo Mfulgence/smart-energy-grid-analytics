@@ -1,0 +1,19 @@
+==============================================================================
+sql_01_1a_create_database   started 2026-10-13 10:28:16.961 CAT   machine Muhirwa
+==============================================================================
+Connected to database 'postgres' as 'postgres' on localhost:5432
+
+[1/1]
+-- ============================================================================
+-- Section 1.1 (part a)  Create the single assignment database
+-- Run while connected to the default "postgres" database:
+--     python run_sql.py sql/01_1a_create_database.sql --db postgres
+-- A database cannot be created from inside itself, which is why this one
+-- statement lives in its own file.
+-- ============================================================================
+CREATE DATABASE energy_grid
+
+CREATE DATABASE
+Time: 1,116.1 ms
+------------------------------------------------------------------------------
+sql_01_1a_create_database   finished 2026-10-13 10:28:18.134 CAT   (output saved in results/sql_01_1a_create_database.log)

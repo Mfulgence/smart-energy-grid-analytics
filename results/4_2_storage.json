@@ -1,0 +1,47 @@
+{
+  "baseline": "energy_readings",
+  "sizes_bytes": {
+    "energy_readings": {
+      "hypertable": "energy_readings",
+      "data_bytes": 997072896,
+      "index_bytes": 488497152,
+      "total_bytes": 1485570048
+    },
+    "energy_time_compressed": {
+      "hypertable": "energy_time_compressed",
+      "data_bytes": 459071488,
+      "index_bytes": 966656,
+      "total_bytes": 460038144
+    },
+    "energy_meter_compressed": {
+      "hypertable": "energy_meter_compressed",
+      "data_bytes": 520298496,
+      "index_bytes": 5718016,
+      "total_bytes": 526016512
+    }
+  },
+  "strategies": [
+    {
+      "table": "energy_time_compressed",
+      "ratio": 3.229232330786901,
+      "saved_percent": 69.03288777130757,
+      "compression_seconds": 18.4537,
+      "load_seconds_excluded": 97.5894,
+      "compressed_chunks": 29,
+      "total_chunks": 29,
+      "rows_in_compressed_chunks": 10643735,
+      "rows_percent": 100.0
+    },
+    {
+      "table": "energy_meter_compressed",
+      "ratio": 2.8241890018844122,
+      "saved_percent": 64.59160490559378,
+      "compression_seconds": 40.2509,
+      "load_seconds_excluded": 126.5871,
+      "compressed_chunks": 29,
+      "total_chunks": 29,
+      "rows_in_compressed_chunks": 10643735,
+      "rows_percent": 100.0
+    }
+  ]
+}

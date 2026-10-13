@@ -1,0 +1,209 @@
+==============================================================================
+6_1_aggregates   started 2026-10-13 13:51:51.677 CAT   machine Muhirwa
+==============================================================================
+
+--- Manual refresh of agg_region_15min (rows before: 0) ---
+CALL refresh_continuous_aggregate('agg_region_15min', TIMESTAMPTZ '2026-09-01 00:00:00+02', TIMESTAMPTZ '2026-09-29 00:00:00+02')
+Refresh finished: 29.19 s   (started 2026-10-13 13:51:51.749 CAT, ended 2026-10-13 13:52:20.944 CAT)   rows now: 26,880
+
+--- Stored size of agg_region_15min ---
+-- Size of the hidden hypertable that stores one view's rows.
+SELECT ca.view_name,
+       s.table_bytes + coalesce(s.toast_bytes, 0) AS data_bytes,
+       s.index_bytes,
+       s.total_bytes
+FROM timescaledb_information.continuous_aggregates ca,
+     LATERAL hypertable_detailed_size(
+         format('%%I.%%I', ca.materialization_hypertable_schema,
+                           ca.materialization_hypertable_name)::regclass) s
+WHERE ca.view_name = %(view)s
+
+view_name        | data_bytes | index_bytes | total_bytes
+-----------------+------------+-------------+------------
+agg_region_15min | 2,211,840  | 2,138,112   | 4,349,952  
+(1 row)
+Time: 76.6 ms
+
+--- Manual refresh of agg_region_hourly (rows before: 0) ---
+CALL refresh_continuous_aggregate('agg_region_hourly', TIMESTAMPTZ '2026-09-01 00:00:00+02', TIMESTAMPTZ '2026-09-29 00:00:00+02')
+Refresh finished: 38.11 s   (started 2026-10-13 13:52:21.014 CAT, ended 2026-10-13 13:52:59.120 CAT)   rows now: 6,720
+
+--- Stored size of agg_region_hourly ---
+-- Size of the hidden hypertable that stores one view's rows.
+SELECT ca.view_name,
+       s.table_bytes + coalesce(s.toast_bytes, 0) AS data_bytes,
+       s.index_bytes,
+       s.total_bytes
+FROM timescaledb_information.continuous_aggregates ca,
+     LATERAL hypertable_detailed_size(
+         format('%%I.%%I', ca.materialization_hypertable_schema,
+                           ca.materialization_hypertable_name)::regclass) s
+WHERE ca.view_name = %(view)s
+
+view_name         | data_bytes | index_bytes | total_bytes
+------------------+------------+-------------+------------
+agg_region_hourly | 671,744    | 622,592     | 1,294,336  
+(1 row)
+Time: 63.2 ms
+
+--- Manual refresh of agg_meter_daily (rows before: 0) ---
+CALL refresh_continuous_aggregate('agg_meter_daily', TIMESTAMPTZ '2026-09-01 00:00:00+02', TIMESTAMPTZ '2026-09-29 00:00:00+02')
+Refresh finished: 27.35 s   (started 2026-10-13 13:52:59.200 CAT, ended 2026-10-13 13:53:26.565 CAT)   rows now: 112,000
+
+--- Stored size of agg_meter_daily ---
+-- Size of the hidden hypertable that stores one view's rows.
+SELECT ca.view_name,
+       s.table_bytes + coalesce(s.toast_bytes, 0) AS data_bytes,
+       s.index_bytes,
+       s.total_bytes
+FROM timescaledb_information.continuous_aggregates ca,
+     LATERAL hypertable_detailed_size(
+         format('%%I.%%I', ca.materialization_hypertable_schema,
+                           ca.materialization_hypertable_name)::regclass) s
+WHERE ca.view_name = %(view)s
+
+view_name       | data_bytes | index_bytes | total_bytes
+----------------+------------+-------------+------------
+agg_meter_daily | 7,766,016  | 5,398,528   | 13,164,544 
+(1 row)
+Time: 27.8 ms
+
+--- Storage and initial refresh cost (measured BEFORE any policy exists) ---
+view              | rows    | initial refresh s | data MB | index MB | total MB
+------------------+---------+-------------------+---------+----------+---------
+agg_region_15min  | 26,880  | 29.19             | 2.11    | 2.04     | 4.15    
+agg_region_hourly | 6,720   | 38.11             | 0.64    | 0.59     | 1.23    
+agg_meter_daily   | 112,000 | 27.35             | 7.41    | 5.15     | 12.55   
+(3 rows)
+Total: 94.65 s refresh, 17.94 MB stored
+SELECT add_continuous_aggregate_policy('agg_region_15min',
+           start_offset      => INTERVAL '3 days',
+           end_offset        => INTERVAL '1 hour',
+           schedule_interval => INTERVAL '15 minutes',
+           if_not_exists     => TRUE) AS job_id
+
+job_id
+------
+1,002 
+(1 row)
+Time: 3.7 ms
+SELECT add_continuous_aggregate_policy('agg_region_hourly',
+           start_offset      => INTERVAL '3 days',
+           end_offset        => INTERVAL '1 hour',
+           schedule_interval => INTERVAL '15 minutes',
+           if_not_exists     => TRUE) AS job_id
+
+job_id
+------
+1,003 
+(1 row)
+Time: 0.7 ms
+SELECT add_continuous_aggregate_policy('agg_meter_daily',
+           start_offset      => INTERVAL '3 days',
+           end_offset        => INTERVAL '1 hour',
+           schedule_interval => INTERVAL '15 minutes',
+           if_not_exists     => TRUE) AS job_id
+
+job_id
+------
+1,004 
+(1 row)
+Time: 0.7 ms
+
+--- View settings (materialized_only = TRUE means real-time is off) ---
+SELECT view_name, materialized_only, materialization_hypertable_name AS stored_in
+FROM timescaledb_information.continuous_aggregates
+WHERE view_name IN ('agg_region_15min', 'agg_region_hourly', 'agg_meter_daily')
+ORDER BY view_name
+
+view_name         | materialized_only | stored_in                 
+------------------+-------------------+---------------------------
+agg_meter_daily   | True              | _materialized_hypertable_8
+agg_region_15min  | True              | _materialized_hypertable_6
+agg_region_hourly | True              | _materialized_hypertable_7
+(3 rows)
+Time: 2.7 ms
+
+--- Sample rows: agg_region_15min ---
+SELECT * FROM agg_region_15min ORDER BY bucket, length(region), region LIMIT 5
+
+bucket                   | region   | energy_kwh_sum | power_kw_sum | reading_count
+-------------------------+----------+----------------+--------------+--------------
+2026-09-01 00:00:00+0200 | Region 1 | 103.019846     | 412.079378   | 398          
+2026-09-01 00:00:00+0200 | Region 2 | 105.530195     | 422.120773   | 399          
+2026-09-01 00:00:00+0200 | Region 3 | 113.369175     | 453.476699   | 399          
+2026-09-01 00:00:00+0200 | Region 4 | 83.514294      | 334.057177   | 396          
+2026-09-01 00:00:00+0200 | Region 5 | 115.856581     | 463.426322   | 393          
+(5 rows)
+Time: 7.3 ms
+
+--- Sample rows: agg_region_hourly ---
+SELECT * FROM agg_region_hourly ORDER BY bucket, length(region), region LIMIT 5
+
+bucket                   | region   | energy_kwh_sum | power_kw_sum | reading_count
+-------------------------+----------+----------------+--------------+--------------
+2026-09-01 00:00:00+0200 | Region 1 | 412.560911     | 1,650.243625 | 1,585        
+2026-09-01 00:00:00+0200 | Region 2 | 420.50422      | 1,682.016874 | 1,589        
+2026-09-01 00:00:00+0200 | Region 3 | 446.040185     | 1,784.16074  | 1,589        
+2026-09-01 00:00:00+0200 | Region 4 | 339.427785     | 1,357.71114  | 1,590        
+2026-09-01 00:00:00+0200 | Region 5 | 469.629237     | 1,878.516938 | 1,579        
+(5 rows)
+Time: 2.4 ms
+
+--- Sample rows: agg_meter_daily ---
+SELECT * FROM agg_meter_daily ORDER BY bucket, meter_id LIMIT 5
+
+bucket                   | meter_id   | energy_kwh_sum | power_kw_sum | reading_count
+-------------------------+------------+----------------+--------------+--------------
+2026-09-01 00:00:00+0200 | 1000000000 | 8.823481       | 35.293921    | 96           
+2026-09-01 00:00:00+0200 | 1000000001 | 13.382749      | 53.530993    | 95           
+2026-09-01 00:00:00+0200 | 1000000002 | 14.722062      | 58.888246    | 93           
+2026-09-01 00:00:00+0200 | 1000000003 | 5.84102        | 23.364076    | 95           
+2026-09-01 00:00:00+0200 | 1000000004 | 17.840065      | 71.360261    | 95           
+(5 rows)
+Time: 1.3 ms
+
+--- Stored aggregates agree with the raw table ---
+SELECT 'energy_readings (raw)' AS source, sum(energy_kwh) AS energy_kwh, count(*) AS readings FROM energy_readings
+UNION ALL SELECT 'agg_region_15min',  sum(energy_kwh_sum), sum(reading_count) FROM agg_region_15min
+UNION ALL SELECT 'agg_region_hourly', sum(energy_kwh_sum), sum(reading_count) FROM agg_region_hourly
+UNION ALL SELECT 'agg_meter_daily',   sum(energy_kwh_sum), sum(reading_count) FROM agg_meter_daily
+
+source                | energy_kwh       | readings
+----------------------+------------------+---------
+energy_readings (raw) | 3,853,704.346816 | 10643735
+agg_region_15min      | 3,853,704.346816 | 10643735
+agg_region_hourly     | 3,853,704.346816 | 10643735
+agg_meter_daily       | 3,853,704.346816 | 10643735
+(4 rows)
+Time: 456.4 ms
+
+--- Policy settings and background job status ---
+-- Policy settings and background job status.
+SELECT j.job_id,
+       ca.view_name,
+       j.schedule_interval::text        AS runs_every,
+       j.config ->> 'start_offset'      AS start_offset,
+       j.config ->> 'end_offset'        AS end_offset,
+       j.scheduled                      AS enabled,
+       s.job_status,
+       s.last_run_status,
+       s.next_start
+FROM timescaledb_information.jobs j
+JOIN timescaledb_information.continuous_aggregates ca
+  -- depending on the TimescaleDB version the job is listed under the view
+  -- name or under the hidden materialization hypertable: accept either
+  ON j.hypertable_name IN (ca.view_name, ca.materialization_hypertable_name)
+LEFT JOIN timescaledb_information.job_stats s ON s.job_id = j.job_id
+WHERE j.proc_name = 'policy_refresh_continuous_aggregate'
+ORDER BY ca.view_name
+
+job_id | view_name         | runs_every | start_offset | end_offset | enabled | job_status | last_run_status | next_start
+-------+-------------------+------------+--------------+------------+---------+------------+-----------------+-----------
+1,004  | agg_meter_daily   | 00:15:00   | 3 days       | 01:00:00   | True    | Scheduled  | NULL            | NULL      
+1,002  | agg_region_15min  | 00:15:00   | 3 days       | 01:00:00   | True    | Scheduled  | NULL            | NULL      
+1,003  | agg_region_hourly | 00:15:00   | 3 days       | 01:00:00   | True    | Scheduled  | NULL            | NULL      
+(3 rows)
+Time: 11.7 ms
+------------------------------------------------------------------------------
+6_1_aggregates   finished 2026-10-13 13:53:27.092 CAT   (output saved in results/6_1_aggregates.log)

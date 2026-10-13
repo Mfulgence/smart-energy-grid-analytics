@@ -1,0 +1,125 @@
+==============================================================================
+2_2_data_quality   started 2026-10-13 11:32:52.413 CAT   machine Muhirwa
+==============================================================================
+
+--- Build the list of observed (meter_id, event_time) pairs ---
+-- One row per observed (meter_id, event_time) pair with the number of copies.
+-- It is a TEMPORARY table: it lives only for this session and is reused by
+-- the queries below so the 10.7 million rows are grouped only once.
+CREATE TEMP TABLE observed_pairs AS
+SELECT meter_id,
+       event_time,
+       count(*)           AS copies,          -- 1 = normal, 2+ = duplicated
+       min(received_time) AS received_time    -- copies share one received_time
+FROM energy_readings
+GROUP BY meter_id, event_time
+
+SELECT 10643735
+Time: 33,510.5 ms
+
+--- Emitted, unique, duplicate and delayed counts ---
+-- emitted = every stored row;  unique = distinct pairs;  extra = emitted - unique.
+SELECT sum(copies)::bigint                                  AS emitted_readings,
+       count(*)                                             AS unique_readings,
+       sum(copies - 1)::bigint                              AS duplicate_readings,
+       count(*) FILTER (WHERE copies > 1)                   AS pairs_with_duplicates,
+       max(copies)                                          AS max_copies_of_one_pair,
+       count(*) FILTER (WHERE received_time > event_time + INTERVAL '15 minutes')
+                                                            AS delayed_unique_readings
+FROM observed_pairs
+
+emitted_readings | unique_readings | duplicate_readings | pairs_with_duplicates | max_copies_of_one_pair | delayed_unique_readings
+-----------------+-----------------+--------------------+-----------------------+------------------------+------------------------
+10,696,848       | 10,643,735      | 53,113             | 53,113                | 2                      | 213,090                
+(1 row)
+Time: 5,326.5 ms
+
+--- Missing pairs from the planned grid ---
+-- Build the planned grid explicitly (meters x 15-minute steps) and count the
+-- grid points that have no observed pair (an anti-join: LEFT JOIN ... IS NULL).
+SELECT count(*)                                        AS planned_readings,
+       count(o.meter_id)                               AS planned_pairs_observed,
+       count(*) FILTER (WHERE o.meter_id IS NULL)      AS missing_readings
+FROM meters m
+CROSS JOIN generate_series(TIMESTAMPTZ '2026-09-01 00:00:00+02',
+                           TIMESTAMPTZ '2026-09-28 23:45:00+02',
+                           INTERVAL '15 minutes') AS grid(event_time)
+LEFT JOIN observed_pairs o
+       ON o.meter_id = m.meter_id AND o.event_time = grid.event_time
+
+planned_readings | planned_pairs_observed | missing_readings
+-----------------+------------------------+-----------------
+10,752,000       | 10,643,735             | 108,265         
+(1 row)
+Time: 21,386.3 ms
+
+--- Arrival delay profile (delayed = 30 to 180 minutes) ---
+-- How late do readings arrive? On-time readings arrive exactly 15 minutes
+-- after event_time; delayed ones should fall between 30 and 180 minutes.
+SELECT CASE WHEN received_time <= event_time + INTERVAL '15 minutes' THEN 'on time (15 min)'
+            ELSE 'delayed' END                                         AS arrival,
+       count(*)                                                        AS unique_readings,
+       min(extract(epoch FROM received_time - event_time) / 60)::int   AS min_minutes_after_event,
+       max(extract(epoch FROM received_time - event_time) / 60)::int   AS max_minutes_after_event
+FROM observed_pairs
+GROUP BY 1
+ORDER BY 1 DESC
+
+arrival          | unique_readings | min_minutes_after_event | max_minutes_after_event
+-----------------+-----------------+-------------------------+------------------------
+on time (15 min) | 10,430,645      | 15                      | 15                     
+delayed          | 213,090         | 30                      | 180                    
+(2 rows)
+Time: 10,294.6 ms
+
+--- Five meters with the most missing readings ---
+-- Each meter should have 28 x 96 = 2,688 readings. Missing = 2,688 - observed.
+SELECT m.meter_id,
+       m.region,
+       m.customer_type,
+       count(o.event_time)            AS observed_readings,
+       28 * 96 - count(o.event_time)  AS missing_readings,
+       round(100.0 * (28 * 96 - count(o.event_time)) / (28 * 96), 3) AS missing_percent
+FROM meters m
+LEFT JOIN observed_pairs o ON o.meter_id = m.meter_id
+GROUP BY m.meter_id, m.region, m.customer_type
+ORDER BY missing_readings DESC, m.meter_id
+LIMIT 5
+
+meter_id   | region    | customer_type | observed_readings | missing_readings | missing_percent
+-----------+-----------+---------------+-------------------+------------------+----------------
+1000003622 | Region 3  | commercial    | 2,641             | 47               | 1.749          
+1000000106 | Region 7  | industrial    | 2,643             | 45               | 1.674          
+1000000366 | Region 7  | commercial    | 2,643             | 45               | 1.674          
+1000001259 | Region 10 | residential   | 2,644             | 44               | 1.637          
+1000000189 | Region 10 | commercial    | 2,645             | 43               | 1.600          
+(5 rows)
+Time: 4,397.3 ms
+
+--- Percentages ---
+Measure              | Formula                       | Value    
+---------------------+-------------------------------+----------
+Missing percentage   | 100 * missing / planned       | 1.0069 % 
+Duplicate percentage | 100 * extra copies / unique   | 0.4990 % 
+Delayed percentage   | 100 * delayed unique / unique | 2.0020 % 
+Completeness         | 100 * unique / planned        | 98.9931 %
+(4 rows)
+
+--- Measured counts compared with dataset_info() ---
+Entry                   | Measured   | Expected   | Difference | Status
+------------------------+------------+------------+------------+-------
+planned_readings        | 10,752,000 | 10,752,000 | 0          | OK    
+emitted_readings        | 10,696,848 | 10,696,848 | 0          | OK    
+unique_readings         | 10,643,735 | 10,643,735 | 0          | OK    
+duplicate_readings      | 53,113     | 53,113     | 0          | OK    
+delayed_unique_readings | 213,090    | 213,090    | 0          | OK    
+missing_readings        | 108,265    | 108,265    | 0          | OK    
+(6 rows)
+
+--- Consistency checks ---
+unique + extra copies = emitted : 10,643,735 + 53,113 = 10,696,848  vs  10,696,848  -> OK
+planned - unique = missing      : 10,752,000 - 10,643,735 = 108,265  vs  108,265  -> OK
+
+RESULT: every measured count matches the reference - continue to 2.3
+------------------------------------------------------------------------------
+2_2_data_quality   finished 2026-10-13 11:34:08.932 CAT   (output saved in results/2_2_data_quality.log)
